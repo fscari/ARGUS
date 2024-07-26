@@ -28,7 +28,7 @@ def main():
     cool = cool[:, :3]
 
     # Set lidar
-    points = 500000
+    points = 5000000
     lidar = lidar_setup(world, blueprint_library, vehicle1, points)
     point_list = o3d.geometry.PointCloud()
     yaw_angle = shared_dict.get('yaw', None)
@@ -55,22 +55,17 @@ def main():
     line_length = 20
 
     frame = 0
-    gaze_refresh_rate = 0.5  # Refresh gaze data every 0.5 seconds
-    last_gaze_update_time = time.time()
     while True:
         if keyboard.is_pressed('q'):
             print("Stopping the loop and destroying the lidar sensor...")
             lidar.destroy()
             break
-        current_time = time.time()
+
         if frame == 2:
             vis.add_geometry(point_list)
 
-            # Get the latest yaw angle from the shared dictionary
-            # get varjo rotation
         yaw_angle = shared_dict.get('yaw', None)
         yaw_rad = -np.radians(yaw_angle)
-
         gaze_angle_rad = np.radians(35) # central vision FOV
         gaze_points = np.array([
             [0.0, 0.0, 0.0],

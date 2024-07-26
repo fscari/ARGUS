@@ -6,7 +6,7 @@ import open3d as o3d
 def lidar_setup(world, blueprint_library, vehicle, points):
     lidar_bp = blueprint_library.find('sensor.lidar.ray_cast')
     lidar_bp.set_attribute('range', '100')
-    lidar_bp.set_attribute('rotation_frequency', '50')
+    lidar_bp.set_attribute('rotation_frequency', '60')
     lidar_bp.set_attribute('channels', '64')
     lidar_bp.set_attribute('points_per_second', str(points))
 
@@ -47,12 +47,12 @@ def lidar_callback(vid_range, viridis, data, point_list, shared_dict, npoints, l
     in_central_vision = is_point_in_central_vision(latest_point, central_yaw)
     print(in_central_vision)
     # Update LiDAR frequency based on points in central vision
-    if in_central_vision and lidar.attributes.get('points_per_second') != '200000':
-        print("Central vision detected, increasing frequency.")
-        update_lidar_rotation_frequency(vid_range, viridis, data, point_list, shared_dict, 200000, lidar, world, blueprint_library, vehicle)
-    elif not in_central_vision and lidar.attributes.get('points_per_second') != '500000':
-        print("Central vision not detected, reverting frequency.")
-        update_lidar_rotation_frequency(vid_range, viridis, data, point_list, shared_dict, 500000, lidar, world, blueprint_library, vehicle)
+    # if in_central_vision and lidar.attributes.get('points_per_second') != '200000':
+    #     print("Central vision detected, increasing frequency.")
+    #     update_lidar_rotation_frequency(vid_range, viridis, data, point_list, shared_dict, 200000, lidar, world, blueprint_library, vehicle)
+    # elif not in_central_vision and lidar.attributes.get('points_per_second') != '500000':
+    #     print("Central vision not detected, reverting frequency.")
+    #     update_lidar_rotation_frequency(vid_range, viridis, data, point_list, shared_dict, 500000, lidar, world, blueprint_library, vehicle)
 
 
 def update_lidar_rotation_frequency(vid_range, viridis, data, point_list, shared_dict, npoints, lidar, world, blueprint_library, vehicle):
