@@ -66,7 +66,7 @@ def varjo_yaw_data(shared_dict):
                 beta = np.degrees(-np.arcsin(rotation_matrix[2,0]))
                 HMD_rotation_yaw = -beta
                 shared_dict['yaw'] = HMD_rotation_yaw
-                time.sleep(0.1)  # Adjust the delay as needed
+                # time.sleep(0.1)  # Adjust the delay as needed
             except Exception as e:
                 print(f"Error in yaw data loop: {e}")
                 break

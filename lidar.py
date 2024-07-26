@@ -2,31 +2,30 @@ import carla
 import numpy as np
 import open3d as o3d
 
-def lidar_setup(world, blueprint_library, vehicle, frequency):
+
+def lidar_setup(world, blueprint_library, vehicle, points):
     lidar_bp = blueprint_library.find('sensor.lidar.ray_cast')
     lidar_bp.set_attribute('range', '100')
-    lidar_bp.set_attribute('rotation_frequency', str(frequency))
+    lidar_bp.set_attribute('rotation_frequency', '50')
     lidar_bp.set_attribute('channels', '64')
-    lidar_bp.set_attribute('points_per_second', '500000')
+    lidar_bp.set_attribute('points_per_second', str(points))
 
     lidar_transform = carla.Transform(carla.Location(x=0, y=0, z=2.5), carla.Rotation(pitch=0, yaw=0, roll=0))
     lidar = world.spawn_actor(lidar_bp, lidar_transform, attach_to=vehicle)
-
     return lidar
 
 
-def is_point_in_central_vision(point, central_yaw, angle_threshold=10):
+def is_point_in_central_vision(point, central_yaw, angle_threshold=35):
     point_yaw = np.degrees(np.arctan2(point[1], point[0]))
     return abs(point_yaw - central_yaw) <= angle_threshold
 
 
-def lidar_callback(vid_range, viridis, data, point_list, central_yaw, frequency, lidar, world, blueprint_library, vehicle):
+def lidar_callback(vid_range, viridis, data, point_list, shared_dict, npoints, lidar, world, blueprint_library, vehicle):
     data = np.copy(np.frombuffer(data.raw_data, dtype=np.dtype('f4')))
     data = np.reshape(data, (int(data.shape[0] / 4), 4))
 
     if data.size == 0:
         return
-
     points = data[:, :-1]
     points[:, :1] = -points[:, :1]  # Flip the x axis
 
@@ -41,23 +40,26 @@ def lidar_callback(vid_range, viridis, data, point_list, central_yaw, frequency,
     ]
     point_list.colors = o3d.utility.Vector3dVector(int_color)
 
+    central_yaw = -shared_dict.get('yaw', None)
+    central_yaw = -np.radians(central_yaw)
     # Check if points are within central vision
-    in_central_vision = any(is_point_in_central_vision(point, central_yaw) for point in points)
-
+    latest_point = points[-1]
+    in_central_vision = is_point_in_central_vision(latest_point, central_yaw)
+    print(in_central_vision)
     # Update LiDAR frequency based on points in central vision
-    if in_central_vision and lidar.attributes.get('rotation_frequency') != '30':
+    if in_central_vision and lidar.attributes.get('points_per_second') != '200000':
         print("Central vision detected, increasing frequency.")
-        update_lidar_rotation_frequency(world, blueprint_library, vehicle, lidar, 30)
-    elif not in_central_vision and lidar.attributes.get('rotation_frequency') != '20':
+        update_lidar_rotation_frequency(vid_range, viridis, data, point_list, shared_dict, 200000, lidar, world, blueprint_library, vehicle)
+    elif not in_central_vision and lidar.attributes.get('points_per_second') != '500000':
         print("Central vision not detected, reverting frequency.")
-        update_lidar_rotation_frequency(world, blueprint_library, vehicle, lidar, 20)
+        update_lidar_rotation_frequency(vid_range, viridis, data, point_list, shared_dict, 500000, lidar, world, blueprint_library, vehicle)
 
 
-def update_lidar_rotation_frequency(world, blueprint_library, vehicle, lidar, new_frequency):
-    """Update the rotation frequency of the LiDAR sensor."""
-
+def update_lidar_rotation_frequency(vid_range, viridis, data, point_list, shared_dict, npoints, lidar, world, blueprint_library, vehicle):
     lidar.destroy()
-    lidar = lidar_setup(world, blueprint_library, vehicle, frequency=new_frequency)
+    lidar = lidar_setup(world, blueprint_library, vehicle, npoints)
+    print('new points: ', npoints)
+    lidar.listen(lambda data: lidar_callback(vid_range, viridis, data, point_list, shared_dict, npoints, lidar, world, blueprint_library, vehicle))
 
     return lidar
 

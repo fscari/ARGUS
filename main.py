@@ -9,7 +9,7 @@ import keyboard
 from multiprocessing import Process, Manager
 
 def main():
-    global vis, pcd
+    global vis, pcd, central_yaw
 
     # Start Varjo process
     manager = Manager()
@@ -17,6 +17,7 @@ def main():
     varjo_process = Process(target=varjo_yaw_data, args=(shared_dict,))
     varjo_process.start()
 
+    # Get Carla connection
     client, world, blueprint_library, vehicle_list, vehicle1 = carla_setup()
 
     # Use updated colormap access
@@ -26,12 +27,14 @@ def main():
     cool = np.array(colormaps['winter'](cool_range))
     cool = cool[:, :3]
 
-    lidar = lidar_setup(world, blueprint_library, vehicle1, frequency=20)
+    # Set lidar
+    points = 500000
+    lidar = lidar_setup(world, blueprint_library, vehicle1, points)
     point_list = o3d.geometry.PointCloud()
-    # lidar.listen(lambda data: lidar_callback(vid_range, viridis, data, point_list))
-    central_yaw = 0  # Central vision yaw angle
-    frequency = 20
-    lidar.listen(lambda data: lidar_callback(vid_range, viridis, data, point_list, central_yaw, frequency, lidar, world, blueprint_library, vehicle1))
+    yaw_angle = shared_dict.get('yaw', None)
+    central_yaw = -np.radians(yaw_angle) # Central vision yaw angle
+
+    lidar.listen(lambda data: lidar_callback(vid_range, viridis, data, point_list, shared_dict, points, lidar, world, blueprint_library, vehicle1))
 
     vis = o3d.visualization.Visualizer()
     vis.create_window(
@@ -63,29 +66,27 @@ def main():
         if frame == 2:
             vis.add_geometry(point_list)
 
-        # update_lidar_rotation_frequency(world, blueprint_library, vehicle1,lidar, new_frequency=30)
-
             # Get the latest yaw angle from the shared dictionary
+            # get varjo rotation
         yaw_angle = shared_dict.get('yaw', None)
+        yaw_rad = -np.radians(yaw_angle)
 
-        if yaw_angle is not None:
-            yaw_rad = -np.radians(yaw_angle)
-            gaze_angle_rad = np.radians(35) # central vision FOV
-            gaze_points = np.array([
-                [0.0, 0.0, 0.0],
-                [line_length * -np.cos(yaw_rad + gaze_angle_rad), line_length * -np.sin(yaw_rad + gaze_angle_rad), 0.0],
-                [line_length * -np.cos(yaw_rad - gaze_angle_rad), line_length * -np.sin(yaw_rad - gaze_angle_rad), 0.0]
-            ])
-            gaze_lines.points = o3d.utility.Vector3dVector(gaze_points)
-            gaze_lines.lines = o3d.utility.Vector2iVector(np.array([
-                [0, 1],
-                [0, 2]
-            ]))
-            gaze_lines.colors = o3d.utility.Vector3dVector(np.array([
-                [1.0, 1.0, 0.0],
-                [1.0, 1.0, 0.0]
-            ]))
-            vis.update_geometry(gaze_lines)
+        gaze_angle_rad = np.radians(35) # central vision FOV
+        gaze_points = np.array([
+            [0.0, 0.0, 0.0],
+            [line_length * -np.cos(yaw_rad + gaze_angle_rad), line_length * -np.sin(yaw_rad + gaze_angle_rad), 0.0],
+            [line_length * -np.cos(yaw_rad - gaze_angle_rad), line_length * -np.sin(yaw_rad - gaze_angle_rad), 0.0]
+        ])
+        gaze_lines.points = o3d.utility.Vector3dVector(gaze_points)
+        gaze_lines.lines = o3d.utility.Vector2iVector(np.array([
+            [0, 1],
+            [0, 2]
+        ]))
+        gaze_lines.colors = o3d.utility.Vector3dVector(np.array([
+            [1.0, 1.0, 0.0],
+            [1.0, 1.0, 0.0]
+        ]))
+        vis.update_geometry(gaze_lines)
 
         vis.update_geometry(point_list)
         vis.poll_events()
