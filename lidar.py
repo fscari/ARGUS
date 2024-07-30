@@ -3,14 +3,14 @@ import numpy as np
 import open3d as o3d
 
 
-def lidar_setup(world, blueprint_library, vehicle, points):
+def lidar_setup(world, blueprint_library, vehicle, points, yaw):
     lidar_bp = blueprint_library.find('sensor.lidar.ray_cast')
     lidar_bp.set_attribute('range', '100')
-    lidar_bp.set_attribute('rotation_frequency', '60')
+    lidar_bp.set_attribute('rotation_frequency', '20')
     lidar_bp.set_attribute('channels', '64')
     lidar_bp.set_attribute('points_per_second', str(points))
 
-    lidar_transform = carla.Transform(carla.Location(x=0, y=0, z=2.5), carla.Rotation(pitch=0, yaw=0, roll=0))
+    lidar_transform = carla.Transform(carla.Location(x=0, y=0, z=2.5), carla.Rotation(pitch=0, yaw=180, roll=0))
     lidar = world.spawn_actor(lidar_bp, lidar_transform, attach_to=vehicle)
     return lidar
 
@@ -40,28 +40,18 @@ def lidar_callback(vid_range, viridis, data, point_list, shared_dict, npoints, l
     ]
     point_list.colors = o3d.utility.Vector3dVector(int_color)
 
-    central_yaw = -shared_dict.get('yaw', None)
-    central_yaw = -np.radians(central_yaw)
-    # Check if points are within central vision
-    latest_point = points[-1]
-    in_central_vision = is_point_in_central_vision(latest_point, central_yaw)
-    print(in_central_vision)
-    # Update LiDAR frequency based on points in central vision
-    # if in_central_vision and lidar.attributes.get('points_per_second') != '200000':
-    #     print("Central vision detected, increasing frequency.")
-    #     update_lidar_rotation_frequency(vid_range, viridis, data, point_list, shared_dict, 200000, lidar, world, blueprint_library, vehicle)
-    # elif not in_central_vision and lidar.attributes.get('points_per_second') != '500000':
-    #     print("Central vision not detected, reverting frequency.")
-    #     update_lidar_rotation_frequency(vid_range, viridis, data, point_list, shared_dict, 500000, lidar, world, blueprint_library, vehicle)
+    central_yaw_deg = -shared_dict.get('yaw', None)
 
+    colors = []
+    for i, point in enumerate(points):
+        if is_point_in_central_vision(point, central_yaw_deg):
+            colors.append([0, 0, 1])  # Blue for points within central vision
+        else:
+            colors.append([int_color[i, 0], int_color[i, 1], int_color[i, 2]])
 
-def update_lidar_rotation_frequency(vid_range, viridis, data, point_list, shared_dict, npoints, lidar, world, blueprint_library, vehicle):
-    lidar.destroy()
-    lidar = lidar_setup(world, blueprint_library, vehicle, npoints)
-    print('new points: ', npoints)
-    lidar.listen(lambda data: lidar_callback(vid_range, viridis, data, point_list, shared_dict, npoints, lidar, world, blueprint_library, vehicle))
-
-    return lidar
+    point_list.colors = o3d.utility.Vector3dVector(colors)
+    point_list.points = o3d.utility.Vector3dVector(points)
+    print(f"Processing {len(data)} points")
 
 
 def lidar_map(vis):
@@ -83,3 +73,8 @@ def lidar_map(vis):
         [0.0, 0.0, 1.0]
     ]))
     vis.add_geometry(axis)
+
+def lidar_callback_wrapped(vid_range, viridis, data, point_list, shared_dict, npoints, lidar, world, blueprint_library, vehicle, data_queue):
+    new_point_list = o3d.geometry.PointCloud()
+    lidar_callback(vid_range, viridis, data, new_point_list, shared_dict, npoints, lidar, world, blueprint_library, vehicle)
+    data_queue.put(new_point_list)

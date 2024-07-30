@@ -2,7 +2,7 @@ import time
 import open3d as o3d
 import numpy as np
 from matplotlib import colormaps
-from lidar import lidar_setup, lidar_callback, update_lidar_rotation_frequency, lidar_map
+from lidar import lidar_setup, lidar_callback, lidar_map
 from carla_setup import carla_setup
 from varjo import varjo_yaw_data
 import keyboard
@@ -28,8 +28,8 @@ def main():
     cool = cool[:, :3]
 
     # Set lidar
-    points = 5000000
-    lidar = lidar_setup(world, blueprint_library, vehicle1, points)
+    points = 500000
+    lidar = lidar_setup(world, blueprint_library, vehicle1, points, 180)
     point_list = o3d.geometry.PointCloud()
     yaw_angle = shared_dict.get('yaw', None)
     central_yaw = -np.radians(yaw_angle) # Central vision yaw angle
@@ -64,13 +64,13 @@ def main():
         if frame == 2:
             vis.add_geometry(point_list)
 
-        yaw_angle = shared_dict.get('yaw', None)
-        yaw_rad = -np.radians(yaw_angle)
+        yaw_angle = -shared_dict.get('yaw', None)
+        yaw_rad = np.radians(yaw_angle)
         gaze_angle_rad = np.radians(35) # central vision FOV
         gaze_points = np.array([
             [0.0, 0.0, 0.0],
-            [line_length * -np.cos(yaw_rad + gaze_angle_rad), line_length * -np.sin(yaw_rad + gaze_angle_rad), 0.0],
-            [line_length * -np.cos(yaw_rad - gaze_angle_rad), line_length * -np.sin(yaw_rad - gaze_angle_rad), 0.0]
+            [line_length * np.cos(yaw_rad + gaze_angle_rad), line_length * np.sin(yaw_rad + gaze_angle_rad), 0.0],
+            [line_length * np.cos(yaw_rad - gaze_angle_rad), line_length * np.sin(yaw_rad - gaze_angle_rad), 0.0]
         ])
         gaze_lines.points = o3d.utility.Vector3dVector(gaze_points)
         gaze_lines.lines = o3d.utility.Vector2iVector(np.array([
