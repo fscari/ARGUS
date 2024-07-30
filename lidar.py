@@ -74,6 +74,7 @@ def lidar_map(vis):
     ]))
     vis.add_geometry(axis)
 
+
 def lidar_callback_wrapped(vid_range, viridis, data, point_list, shared_dict, npoints, lidar, world, blueprint_library, vehicle, data_queue):
     new_point_list = o3d.geometry.PointCloud()
     lidar_callback(vid_range, viridis, data, new_point_list, shared_dict, npoints, lidar, world, blueprint_library, vehicle)
