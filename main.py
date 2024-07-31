@@ -6,7 +6,7 @@ from lidar import lidar_setup, lidar_callback, lidar_map
 from carla_setup import carla_setup
 from varjo import varjo_yaw_data
 import keyboard
-from multiprocessing import Process, Manager
+from multiprocessing import Process, Manager, Event
 
 def main():
     global vis, pcd, central_yaw
@@ -14,7 +14,8 @@ def main():
     # Start Varjo process
     manager = Manager()
     shared_dict = manager.dict()
-    varjo_process = Process(target=varjo_yaw_data, args=(shared_dict,))
+    stop_event = Event()
+    varjo_process = Process(target=varjo_yaw_data, args=(shared_dict, stop_event))
     varjo_process.start()
 
     # Get Carla connection
@@ -29,7 +30,8 @@ def main():
 
     # Set lidar
     points = 500000
-    lidar = lidar_setup(world, blueprint_library, vehicle1, points, 180)
+    frequency = 20
+    lidar = lidar_setup(world, blueprint_library, vehicle1, points, frequency)
     point_list = o3d.geometry.PointCloud()
     yaw_angle = shared_dict.get('yaw', None)
     central_yaw = -np.radians(yaw_angle) # Central vision yaw angle
@@ -59,6 +61,8 @@ def main():
         if keyboard.is_pressed('q'):
             print("Stopping the loop and destroying the lidar sensor...")
             lidar.destroy()
+            stop_event.set()  # Signal Varjo process to stop
+            varjo_process.join()  # Wait for Varjo process to finish
             break
 
         if frame == 2:

@@ -2,19 +2,23 @@ import time
 import open3d as o3d
 import numpy as np
 from matplotlib import colormaps
-from lidar import lidar_setup, lidar_callback, lidar_map
+from lidar import lidar_setup, lidar_callback_wrapped, lidar_map, save_lidar_data
 from carla_setup import carla_setup
 from varjo import varjo_yaw_data
 import keyboard
-from multiprocessing import Process, Manager
+from multiprocessing import Process, Manager, Event
+import queue
 
 def main():
     global vis, pcd, central_yaw
 
-    # Start Varjo process
+    # Create shared dictionary to save data between multiprocess
     manager = Manager()
     shared_dict = manager.dict()
-    varjo_process = Process(target=varjo_yaw_data, args=(shared_dict,))
+    lidar_live_dict = {'epoch': [], 'points': [], 'color': []}
+    # Start Varjo process and create event to stop varjo
+    stop_event = Event()
+    varjo_process = Process(target=varjo_yaw_data, args=(shared_dict, stop_event))
     varjo_process.start()
 
     # Get Carla connection
@@ -23,16 +27,21 @@ def main():
     # Use updated colormap access
     viridis = np.array(colormaps['plasma'].colors)
     vid_range = np.linspace(0.0, 1.0, viridis.shape[0])
-    cool_range = np.linspace(0.0, 1.0, viridis.shape[0])
-    cool = np.array(colormaps['winter'](cool_range))
-    cool = cool[:, :3]
 
-    # Set up LiDAR
+    # Set lidar
     points = 500000
-    lidar = lidar_setup(world, blueprint_library, vehicle1, points, 180)
+    frequency = 20
+    lidar = lidar_setup(world, blueprint_library, vehicle1, points, frequency)
     point_list = o3d.geometry.PointCloud()
+    yaw_angle = shared_dict.get('yaw', None)
+    central_yaw = -np.radians(yaw_angle) # Central vision yaw angle
 
-    lidar.listen(lambda data: lidar_callback(vid_range, viridis, data, point_list, shared_dict, points, lidar, world, blueprint_library, vehicle1))
+    # Create a queue to store LiDAR data
+    data_queue = queue.Queue()
+
+    # Wrap the LiDAR callback to use the queue
+    lidar.listen(lambda data: lidar_callback_wrapped(vid_range, viridis, data, point_list, shared_dict, points, lidar, world, blueprint_library,
+                                                                       vehicle1, data_queue, lidar_live_dict))
 
     # Initialize visualizer
     vis = o3d.visualization.Visualizer()
@@ -46,8 +55,6 @@ def main():
     vis.get_render_option().background_color = [0.05, 0.05, 0.05]
     vis.get_render_option().point_size = 1
     vis.get_render_option().show_coordinate_frame = True
-
-    # vis.add_geometry(point_list)
     lidar_map(vis)
 
     # Initialize gaze lines
@@ -58,9 +65,21 @@ def main():
     frame = 0
     while True:
         if keyboard.is_pressed('q'):
-            print("Stopping the loop and destroying the LiDAR sensor...")
+            print("Stopping the loop and destroying the lidar sensor...")
             lidar.destroy()
+            stop_event.set()  # Signal Varjo process to stop
+            varjo_process.join()  # Wait for Varjo process to finish
+            save_lidar_data(lidar_live_dict)  # Save LiDAR data to CSV
             break
+
+        # Update the point cloud if new data is available
+        while not data_queue.empty():
+            new_data = data_queue.get()
+            point_list.points = new_data.points
+            point_list.colors = new_data.colors
+
+        if frame == 2:
+            vis.add_geometry(point_list)
 
         yaw_angle = -shared_dict.get('yaw', 0)
         yaw_rad = np.radians(yaw_angle)
@@ -82,7 +101,6 @@ def main():
         vis.update_geometry(gaze_lines)
 
         vis.update_geometry(point_list)
-
         vis.poll_events()
         vis.update_renderer()
         time.sleep(0.005)
@@ -91,7 +109,6 @@ def main():
     # Cleanup
     vis.destroy_window()
     varjo_process.terminate()
-
 
 if __name__ == '__main__':
     main()
