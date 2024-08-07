@@ -9,6 +9,7 @@ import keyboard
 from multiprocessing import Process, Manager, Event
 import queue
 
+
 def main():
     global vis, pcd, central_yaw
 
@@ -22,7 +23,8 @@ def main():
     varjo_process.start()
 
     # Get Carla connection
-    client, world, blueprint_library, vehicle_list, vehicle1 = carla_setup()
+    client, world, current_weather, blueprint_library, vehicle_list, vehicle1 = carla_setup()
+    fog_density = current_weather.fog_density
 
     # Use updated colormap access
     viridis = np.array(colormaps['plasma'].colors)
@@ -30,8 +32,8 @@ def main():
 
     # Set lidar
     points = 500000
-    frequency = 20
-    lidar = lidar_setup(world, blueprint_library, vehicle1, points, frequency)
+    frequency = 60
+    lidar = lidar_setup(world, blueprint_library, vehicle1, points, frequency, fog_density)
     point_list = o3d.geometry.PointCloud()
     yaw_angle = shared_dict.get('yaw', None)
     central_yaw = -np.radians(yaw_angle) # Central vision yaw angle
