@@ -3,7 +3,8 @@ import numpy as np
 import open3d as o3d
 from datetime import datetime
 import pandas as pd
-
+from preprocess_lidar import filter_ground_points, downsample_point_cloud, segment_clusters, remove_small_clusters, compute_bounding_boxes,\
+    add_bounding_boxes_to_point_cloud
 
 def lidar_setup(world, blueprint_library, vehicle, points, frequency, fog_density):
     lidar_bp = blueprint_library.find('sensor.lidar.ray_cast')
@@ -19,7 +20,7 @@ def lidar_setup(world, blueprint_library, vehicle, points, frequency, fog_densit
     return lidar
 
 
-def lidar_callback(vid_range, viridis, data, point_list, shared_dict, npoints, lidar, world, blueprint_library, vehicle, lidar_live_dict, downsampling_factor=6):
+def lidar_callback(vid_range, viridis, data, point_list, shared_dict, lidar_live_dict, downsampling_factor=6):
     # Copy and reshape the LiDAR data
     data = np.copy(np.frombuffer(data.raw_data, dtype=np.dtype('f4')))
     data = np.reshape(data, (int(data.shape[0] / 4), 4))
@@ -56,12 +57,30 @@ def lidar_callback(vid_range, viridis, data, point_list, shared_dict, npoints, l
     combined_points = np.vstack((downsampled_points, points[~in_central_vision]))
     combined_colors = np.vstack((downsampled_colors, int_color[~in_central_vision]))
 
+    # Testing recognition of vehicles with Lidar
+    # Filter ground points
+    filtered_points = filter_ground_points(combined_points)
+
+    # Downsample the entire point cloud
+    downsampled_points = downsample_point_cloud(filtered_points)
+
+    # Segment and cluster points
+    labels = segment_clusters(downsampled_points)
+
+    # Remove noise and small clusters
+    filtered_points = remove_small_clusters(downsampled_points, labels)
+
+    # Compute bounding boxes
+    bounding_boxes = compute_bounding_boxes(downsampled_points, labels)
+
     # Update the point cloud for visualization
-    point_list.points = o3d.utility.Vector3dVector(combined_points)
+    # point_list.points = o3d.utility.Vector3dVector(combined_points)
+    point_list.points = o3d.utility.Vector3dVector(filtered_points)
     point_list.colors = o3d.utility.Vector3dVector(combined_colors)
 
     # Accumulate downsampled points and colors in lidar_live_dict
-    lidar_live_dict['points'].append(combined_points)
+    # lidar_live_dict['points'].append(combined_points)
+    lidar_live_dict['points'].append(filtered_points)
     lidar_live_dict['color'].append(combined_colors)
     time_now = datetime.utcnow()
     epoch_time = int((time_now - datetime(1970, 1, 1)).total_seconds() * 1000000000)
@@ -89,8 +108,8 @@ def lidar_map(vis):
     vis.add_geometry(axis)
 
 
-def lidar_callback_wrapped(vid_range, viridis, data, point_list, shared_dict, npoints, lidar, world, blueprint_library, vehicle, data_queue, lidar_live_dict):
-    lidar_callback(vid_range, viridis, data, point_list, shared_dict, npoints, lidar, world, blueprint_library, vehicle, lidar_live_dict)
+def lidar_callback_wrapped(vid_range, viridis, data, point_list, shared_dict, data_queue, lidar_live_dict):
+    lidar_callback(vid_range, viridis, data, point_list, shared_dict, lidar_live_dict)
     data_queue.put(point_list)
 
 

@@ -17,6 +17,7 @@ def main():
     manager = Manager()
     shared_dict = manager.dict()
     lidar_live_dict = {'epoch': [], 'points': [], 'color': []}
+
     # Start Varjo process and create event to stop varjo
     stop_event = Event()
     varjo_process = Process(target=varjo_yaw_data, args=(shared_dict, stop_event))
@@ -42,8 +43,7 @@ def main():
     data_queue = queue.Queue()
 
     # Wrap the LiDAR callback to use the queue
-    lidar.listen(lambda data: lidar_callback_wrapped(vid_range, viridis, data, point_list, shared_dict, points, lidar, world, blueprint_library,
-                                                                       vehicle1, data_queue, lidar_live_dict))
+    lidar.listen(lambda data: lidar_callback_wrapped(vid_range, viridis, data, point_list, shared_dict, data_queue, lidar_live_dict))
 
     # Initialize visualizer
     vis = o3d.visualization.Visualizer()
@@ -71,7 +71,7 @@ def main():
             lidar.destroy()
             stop_event.set()  # Signal Varjo process to stop
             varjo_process.join()  # Wait for Varjo process to finish
-            save_lidar_data(lidar_live_dict)  # Save LiDAR data to CSV
+            # save_lidar_data(lidar_live_dict)  # Save LiDAR data to CSV
             break
 
         # Update the point cloud if new data is available
