@@ -11,7 +11,7 @@ import queue
 
 
 def main():
-    global vis, pcd, central_yaw
+    global vis, pcd, central_yaw, prev_bounding_boxes
 
     # Create shared dictionary to save data between multiprocess
     manager = Manager()
@@ -43,7 +43,7 @@ def main():
     data_queue = queue.Queue()
 
     # Wrap the LiDAR callback to use the queue
-    lidar.listen(lambda data: lidar_callback_wrapped(vid_range, viridis, data, point_list, shared_dict, data_queue, lidar_live_dict))
+    lidar.listen(lambda data: lidar_callback_wrapped(vid_range, viridis, data, point_list, shared_dict, data_queue, lidar_live_dict, drivers_gaze=False))
 
     # Initialize visualizer
     vis = o3d.visualization.Visualizer()
@@ -85,7 +85,7 @@ def main():
 
         yaw_angle = -shared_dict.get('yaw', 0)
         yaw_rad = np.radians(yaw_angle)
-        gaze_angle_rad = np.radians(35)  # central vision FOV
+        gaze_angle_rad = np.radians(30)  # central vision FOV
         gaze_points = np.array([
             [0.0, 0.0, 0.0],
             [line_length * np.cos(yaw_rad + gaze_angle_rad), line_length * np.sin(yaw_rad + gaze_angle_rad), 0.0],
