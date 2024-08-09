@@ -3,7 +3,11 @@ import numpy as np
 import open3d as o3d
 from datetime import datetime
 import pandas as pd
-from preprocess_lidar import filter_ground_points, downsample_point_cloud, segment_clusters, remove_small_clusters, compute_bounding_boxes, match_bounding_boxes, compute_iou
+from preprocess_lidar import filter_ground_points, downsample_point_cloud, segment_clusters, remove_small_clusters, compute_bounding_boxes, match_bounding_boxes, \
+    compute_iou, detect_moving_objects
+
+prev_position = carla.Location()
+prev_bounding_boxes = []
 
 def lidar_setup(world, blueprint_library, vehicle, points, frequency, fog_density):
     lidar_bp = blueprint_library.find('sensor.lidar.ray_cast')
@@ -19,8 +23,9 @@ def lidar_setup(world, blueprint_library, vehicle, points, frequency, fog_densit
     return lidar
 
 
-def lidar_callback(vid_range, viridis, data, point_list, shared_dict, lidar_live_dict, drivers_gaze=False, lidar_processing=False):
-    global prev_bounding_boxes
+def lidar_callback(vid_range, viridis, data, point_list, shared_dict, lidar_live_dict, vehicle, power_control=False, drivers_gaze=False, lidar_processing=False):
+    global prev_bounding_boxes, prev_position
+
     downsampling_factor = 6
     # Copy and reshape the LiDAR data
     data = np.copy(np.frombuffer(data.raw_data, dtype=np.dtype('f4')))
@@ -33,9 +38,10 @@ def lidar_callback(vid_range, viridis, data, point_list, shared_dict, lidar_live
     lidar_points[:, :1] = -lidar_points[:, :1]  # Flip the x axis
     intensity = data[:, -1]
     central_yaw_deg = -shared_dict.get('yaw', None)
-    adjusted_intensity = adjust_intensity(lidar_points, intensity, central_yaw_deg)
+    if power_control:
+        intensity = adjust_intensity(lidar_points, intensity, central_yaw_deg)
 
-    intensity_col = 1.0 - np.log(np.clip(adjusted_intensity, a_min=1e-6, a_max=None)) / np.log(np.exp(-0.004 * 100))
+    intensity_col = 1.0 - np.log(np.clip(intensity, a_min=1e-6, a_max=None)) / np.log(np.exp(-0.004 * 100))
     int_color = np.c_[
         np.interp(intensity_col, vid_range, viridis[:, 0]),
         np.interp(intensity_col, vid_range, viridis[:, 1]),
@@ -43,10 +49,25 @@ def lidar_callback(vid_range, viridis, data, point_list, shared_dict, lidar_live
     ]
     lidar_color = int_color
 
+    prev_position = vehicle.get_location()  # Get initial position
+
+    # After some time, e.g., in the next frame
+    curr_position = vehicle.get_location()  # Get current position
+    velocity = vehicle.get_velocity()  # Get current velocity
+    yaw = vehicle.get_transform().rotation.yaw  # Get yaw angle
+
+    # Calculate displacement
+    displacement = np.sqrt((curr_position.x - prev_position.x) ** 2 +
+                           (curr_position.y - prev_position.y) ** 2 +
+                           (curr_position.z - prev_position.z) ** 2)
+
+    # Update previous position for the next iteration
+    prev_position = curr_position
+
     if drivers_gaze:
         # Vectorized mask for points in central vision
         point_yaws = np.degrees(np.arctan2(lidar_points[:, 1], lidar_points[:, 0]))
-        in_central_vision = np.abs(point_yaws - central_yaw_deg) <= 35
+        in_central_vision = np.abs(point_yaws - central_yaw_deg) <= 30
 
         # Downsample points in central vision
         central_vision_points = lidar_points[in_central_vision]
@@ -73,9 +94,14 @@ def lidar_callback(vid_range, viridis, data, point_list, shared_dict, lidar_live
 
         # Remove noise and small clusters
         filtered_points = remove_small_clusters(downsampled_points, labels)
-
+        labels = segment_clusters(filtered_points)
         # Compute bounding boxes
-        bounding_boxes = compute_bounding_boxes(downsampled_points, labels)
+        bounding_boxes = compute_bounding_boxes(filtered_points, labels)
+
+        match_bounding_boxes(prev_bounding_boxes, bounding_boxes)
+
+        # Check moving bounding boxes
+        detect_moving_objects(prev_bounding_boxes, bounding_boxes, displacement)
 
     # Update the point cloud for visualization
     # point_list.points = o3d.utility.Vector3dVector(combined_points)
@@ -89,6 +115,7 @@ def lidar_callback(vid_range, viridis, data, point_list, shared_dict, lidar_live
     time_now = datetime.utcnow()
     epoch_time = int((time_now - datetime(1970, 1, 1)).total_seconds() * 1000000000)
     lidar_live_dict['epoch'].append(epoch_time)
+    prev_bounding_boxes = bounding_boxes
 
 
 def lidar_map(vis):
@@ -112,8 +139,10 @@ def lidar_map(vis):
     vis.add_geometry(axis)
 
 
-def lidar_callback_wrapped(vid_range, viridis, data, point_list, shared_dict, data_queue, lidar_live_dict, drivers_gaze=False, lidar_processing=False):
-    lidar_callback(vid_range, viridis, data, point_list, shared_dict, lidar_live_dict, drivers_gaze=drivers_gaze, lidar_processing=lidar_processing)
+def lidar_callback_wrapped(vid_range, viridis, data, point_list, shared_dict, data_queue, lidar_live_dict, vehicle, power_control=False, drivers_gaze=False,
+                           lidar_processing=False):
+    lidar_callback(vid_range, viridis, data, point_list, shared_dict, lidar_live_dict, vehicle, power_control=power_control, drivers_gaze=drivers_gaze,
+                   lidar_processing=lidar_processing)
     data_queue.put(point_list)
 
 
@@ -146,7 +175,7 @@ def save_lidar_data(lidar_live_dict):
     print(f"Lidar data saved to {location}")
 
 
-def adjust_intensity(points, intensity, gaze_angle, field_of_view=60, power_reduction_factor=0.5):
+def adjust_intensity(points, intensity, gaze_angle, field_of_view=60):
     """
     Adjusts the intensity of the LiDAR points based on the driver's gaze angle and field of view.
 
@@ -156,10 +185,14 @@ def adjust_intensity(points, intensity, gaze_angle, field_of_view=60, power_redu
     - gaze_angle (float): The driver's gaze angle in degrees.
     - field_of_view (float): The field of view of the driver in degrees.
     - power_reduction_factor (float): Factor by which power is reduced in the driver's field of view.
+    - power_increase_factor (float) :Factor by which power is increased outside the driver's field of view.
 
     Returns:
     - adjusted_intensity (np.array): The adjusted intensity values.
     """
+    power_reduction_factor = 0.5
+    power_increase_factor = 1.1
+
     # Convert the field of view to radians
     field_of_view_rad = np.radians(field_of_view)
 
@@ -173,6 +206,5 @@ def adjust_intensity(points, intensity, gaze_angle, field_of_view=60, power_redu
     # Adjust the intensity based on whether the point is in the driver's field of view
     adjusted_intensity = np.copy(intensity)
     adjusted_intensity[in_fov] *= power_reduction_factor
-    adjusted_intensity[~in_fov] *= (1 / power_reduction_factor)
-
+    adjusted_intensity[~in_fov] *= power_increase_factor
     return adjusted_intensity

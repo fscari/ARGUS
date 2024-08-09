@@ -3,6 +3,30 @@ import numpy as np
 from sklearn.cluster import DBSCAN
 
 
+class BoundingBox:
+    def __init__(self, min_bound, max_bound):
+        self.min_bound = np.array(min_bound)
+        self.max_bound = np.array(max_bound)
+
+    def get_corners(self):
+        # Get the 8 corners of the bounding box
+        min_bound = self.min_bound
+        max_bound = self.max_bound
+        return np.array([
+            [min_bound[0], min_bound[1], min_bound[2]],
+            [max_bound[0], min_bound[1], min_bound[2]],
+            [min_bound[0], max_bound[1], min_bound[2]],
+            [max_bound[0], max_bound[1], min_bound[2]],
+            [min_bound[0], min_bound[1], max_bound[2]],
+            [max_bound[0], min_bound[1], max_bound[2]],
+            [min_bound[0], max_bound[1], max_bound[2]],
+            [max_bound[0], max_bound[1], max_bound[2]]
+        ])
+
+    def volume(self):
+        # Calculate the volume of the bounding box
+        return np.prod(self.max_bound - self.min_bound)
+
 def filter_ground_points(points, z_threshold=-2.6):
     # Keep points with z greater than z_threshold
     return points[points[:, 2] > z_threshold]
@@ -41,11 +65,7 @@ def remove_small_clusters(points, labels, min_cluster_size=100):
 
 
 def compute_bounding_boxes(points, labels):
-    print(f"Points shape: {points.shape}")
-    print(f"Labels shape: {labels.shape}")
-
     unique_labels = np.unique(labels)
-    print(f"Unique labels: {unique_labels}")
     bounding_boxes = []
     unique_labels = np.unique(labels)
     for label in unique_labels:
@@ -54,11 +74,61 @@ def compute_bounding_boxes(points, labels):
         cluster_points = points[labels == label]
         if cluster_points.size == 0:
             continue
-        # min_bound = cluster_points.min(axis=0)
-        # max_bound = cluster_points.max(axis=0)
-        # bounding_boxes.append((min_bound, max_bound))
-        # Create a bounding box for the cluster
-        bbox = o3d.geometry.AxisAlignedBoundingBox.create_from_points(o3d.utility.Vector3dVector(cluster_points))
-        bbox.color = (1, 0, 0)  # Set color to red
-        bounding_boxes.append(bbox)
+        min_bound = cluster_points.min(axis=0)
+        max_bound = cluster_points.max(axis=0)
+
+        # Create BoundingBox object
+        bounding_box = BoundingBox(min_bound, max_bound)
+        bounding_boxes.append(bounding_box)
     return bounding_boxes
+
+
+def match_bounding_boxes(prev_boxes, curr_boxes):
+    matches = []
+    for prev_box in prev_boxes:
+        for curr_box in curr_boxes:
+            iou = compute_iou(prev_box, curr_box)
+            if iou > 0.5:  # Example IoU threshold
+                matches.append((prev_box, curr_box))
+    return matches
+
+
+def compute_iou(box1, box2):
+    # Calculate IoU between two BoundingBox objects
+    corners1 = box1.get_corners()
+    corners2 = box2.get_corners()
+
+    # Compute intersection box
+    min_point = np.maximum(np.min(corners1, axis=0), np.min(corners2, axis=0))
+    max_point = np.minimum(np.max(corners1, axis=0), np.max(corners2, axis=0))
+
+    inter_dim = np.maximum(0, max_point - min_point)
+    intersection_volume = np.prod(inter_dim)
+
+    volume1 = box1.volume()
+    volume2 = box2.volume()
+
+    union_volume = volume1 + volume2 - intersection_volume
+
+    iou = intersection_volume / union_volume if union_volume > 0 else 0
+    return iou
+
+
+def detect_moving_objects(prev_bounding_boxes, curr_bounding_boxes, displacement, iou_threshold=0.5):
+    moving_objects = []
+    for prev_box, curr_box in match_bounding_boxes(prev_bounding_boxes, curr_bounding_boxes):
+        # Calculate the displacement of the bounding box centers
+        prev_center = (prev_box.min_bound + prev_box.max_bound) / 2
+        curr_center = (curr_box.min_bound + curr_box.max_bound) / 2
+        bbox_displacement = np.linalg.norm(curr_center - prev_center)
+
+        # Adjust for ego vehicle displacement
+        relative_displacement = bbox_displacement - np.linalg.norm(displacement)
+
+        # Check if the object is moving
+        if relative_displacement > 10:
+            moving_objects.append(curr_box)
+            print("yes")
+            print(relative_displacement)
+
+    return moving_objects

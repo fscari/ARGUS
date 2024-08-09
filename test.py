@@ -1,4 +1,5 @@
 import time
+import carla
 import open3d as o3d
 import numpy as np
 from matplotlib import colormaps
@@ -11,7 +12,7 @@ import queue
 
 
 def main():
-    global vis, pcd, central_yaw, prev_bounding_boxes
+    global vis, pcd, central_yaw, prev_bounding_boxes, prev_position
 
     # Create shared dictionary to save data between multiprocess
     manager = Manager()
@@ -43,7 +44,7 @@ def main():
     data_queue = queue.Queue()
 
     # Wrap the LiDAR callback to use the queue
-    lidar.listen(lambda data: lidar_callback_wrapped(vid_range, viridis, data, point_list, shared_dict, data_queue, lidar_live_dict, drivers_gaze=False))
+    lidar.listen(lambda data: lidar_callback_wrapped(vid_range, viridis, data, point_list, shared_dict, data_queue, lidar_live_dict, vehicle1, power_control=True, drivers_gaze=True))
 
     # Initialize visualizer
     vis = o3d.visualization.Visualizer()
