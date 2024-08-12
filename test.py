@@ -44,7 +44,8 @@ def main():
     data_queue = queue.Queue()
 
     # Wrap the LiDAR callback to use the queue
-    lidar.listen(lambda data: lidar_callback_wrapped(vid_range, viridis, data, point_list, shared_dict, data_queue, lidar_live_dict, vehicle1, power_control=True, drivers_gaze=True))
+    lidar.listen(lambda data: lidar_callback_wrapped(vid_range, viridis, data, point_list, shared_dict, data_queue, lidar_live_dict, vehicle1,
+                                                     power_control=False, drivers_gaze=False, lidar_processing=True))
 
     # Initialize visualizer
     vis = o3d.visualization.Visualizer()

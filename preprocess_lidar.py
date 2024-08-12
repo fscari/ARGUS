@@ -41,7 +41,7 @@ def downsample_point_cloud(points, voxel_size=0.5):
     return downsampled_points
 
 
-def segment_clusters(points, eps=10, min_samples=10):
+def segment_clusters(points, eps=2, min_samples=5):
     points = np.asarray(points)
     # Perform clustering
     clustering = DBSCAN(eps=eps, min_samples=min_samples).fit(points)
@@ -52,7 +52,7 @@ def segment_clusters(points, eps=10, min_samples=10):
     return labels
 
 
-def remove_small_clusters(points, labels, min_cluster_size=100):
+def remove_small_clusters(points, labels, min_cluster_size=2):
     unique_labels = np.unique(labels)
     filtered_points = []
     for label in unique_labels:
@@ -80,6 +80,7 @@ def compute_bounding_boxes(points, labels):
         # Create BoundingBox object
         bounding_box = BoundingBox(min_bound, max_bound)
         bounding_boxes.append(bounding_box)
+
     return bounding_boxes
 
 
@@ -88,7 +89,7 @@ def match_bounding_boxes(prev_boxes, curr_boxes):
     for prev_box in prev_boxes:
         for curr_box in curr_boxes:
             iou = compute_iou(prev_box, curr_box)
-            if iou > 0.5:  # Example IoU threshold
+            if iou > 0.75:  # Example IoU threshold
                 matches.append((prev_box, curr_box))
     return matches
 
@@ -126,9 +127,8 @@ def detect_moving_objects(prev_bounding_boxes, curr_bounding_boxes, displacement
         relative_displacement = bbox_displacement - np.linalg.norm(displacement)
 
         # Check if the object is moving
-        if relative_displacement > 10:
+        if relative_displacement > 1.15:
             moving_objects.append(curr_box)
-            print("yes")
             print(relative_displacement)
 
     return moving_objects

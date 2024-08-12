@@ -83,8 +83,30 @@ def lidar_callback(vid_range, viridis, data, point_list, shared_dict, lidar_live
 
     if lidar_processing:
         # Testing recognition of vehicles with Lidar
+        # Get vehicle's yaw and convert it to radians
+        vehicle_yaw = np.radians(vehicle.get_transform().rotation.yaw)
+
+        # Calculate the angles of each point relative to the vehicle's forward direction
+        point_angles = np.arctan2(lidar_points[:, 1], lidar_points[:, 0])
+
+        # Normalize the angles relative to the vehicle's yaw
+        relative_angles = point_angles - vehicle_yaw
+
+        # Adjust for LiDAR's 180-degree backward orientation
+        relative_angles = relative_angles - np.pi/2
+
+        # Normalize angles to the range [-π, π]
+        relative_angles = (relative_angles + np.pi) % (2 * np.pi) - np.pi
+
+        # Create a mask for points within ±90 degrees of the vehicle's forward direction
+        roi_mask = np.abs(relative_angles) <= np.pi / 2
+
+        # Filter points within the ROI
+        lidar_points_roi = lidar_points[roi_mask]
+        lidar_color = lidar_color[roi_mask]
+
         # Filter ground points
-        filtered_points = filter_ground_points(lidar_points)
+        filtered_points = filter_ground_points(lidar_points_roi)
 
         # Downsample the entire point cloud
         downsampled_points = downsample_point_cloud(filtered_points)
@@ -94,19 +116,24 @@ def lidar_callback(vid_range, viridis, data, point_list, shared_dict, lidar_live
 
         # Remove noise and small clusters
         filtered_points = remove_small_clusters(downsampled_points, labels)
-        labels = segment_clusters(filtered_points)
+        # labels = segment_clusters(filtered_points)
         # Compute bounding boxes
-        bounding_boxes = compute_bounding_boxes(filtered_points, labels)
-
-        match_bounding_boxes(prev_bounding_boxes, bounding_boxes)
+        bounding_boxes = compute_bounding_boxes(downsampled_points, labels)
 
         # Check moving bounding boxes
-        detect_moving_objects(prev_bounding_boxes, bounding_boxes, displacement)
+        moving_bounding_boxes = detect_moving_objects(prev_bounding_boxes, bounding_boxes, displacement)
+
+        # Decrease intensity of points within moving objects
+        # for moving_object in moving_bounding_boxes:
+        #     min_bound = moving_object.min_bound
+        #     max_bound = moving_object.max_bound
+        #     in_moving_object = np.all(np.logical_and(lidar_points >= min_bound, lidar_points <= max_bound), axis=1)
+        #     lidar_color[in_moving_object] *= 0.5  # Reduce intensity by 50%
 
     # Update the point cloud for visualization
     # point_list.points = o3d.utility.Vector3dVector(combined_points)
-    point_list.points = o3d.utility.Vector3dVector(lidar_points)
-    point_list.colors = o3d.utility.Vector3dVector(lidar_color)
+    point_list.points = o3d.utility.Vector3dVector(filtered_points) # lidar_points  lidar_points_roi
+    point_list.colors = o3d.utility.Vector3dVector(lidar_color) # lidar_color
 
     # Accumulate downsampled points and colors in lidar_live_dict
     # lidar_live_dict['points'].append(combined_points)
