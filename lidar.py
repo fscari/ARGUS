@@ -106,33 +106,33 @@ def lidar_callback(vid_range, viridis, data, point_list, shared_dict, lidar_live
         lidar_color = lidar_color[roi_mask]
 
         # Filter ground points
-        filtered_points = filter_ground_points(lidar_points_roi)
+        filtered_points, lidar_color = filter_ground_points(lidar_points_roi, lidar_color)
 
         # Downsample the entire point cloud
-        downsampled_points = downsample_point_cloud(filtered_points)
-
+        downsampled_points, lidar_color = downsample_point_cloud(filtered_points, lidar_color)
         # Segment and cluster points
         labels = segment_clusters(downsampled_points)
 
         # Remove noise and small clusters
-        filtered_points = remove_small_clusters(downsampled_points, labels)
-        # labels = segment_clusters(filtered_points)
+        lidar_points, lidar_color = remove_small_clusters(downsampled_points, labels, lidar_color)
+        labels = segment_clusters(lidar_points)
+
         # Compute bounding boxes
-        bounding_boxes = compute_bounding_boxes(downsampled_points, labels)
+        bounding_boxes = compute_bounding_boxes(lidar_points, labels)
 
         # Check moving bounding boxes
         moving_bounding_boxes = detect_moving_objects(prev_bounding_boxes, bounding_boxes, displacement)
 
         # Decrease intensity of points within moving objects
-        # for moving_object in moving_bounding_boxes:
-        #     min_bound = moving_object.min_bound
-        #     max_bound = moving_object.max_bound
-        #     in_moving_object = np.all(np.logical_and(lidar_points >= min_bound, lidar_points <= max_bound), axis=1)
-        #     lidar_color[in_moving_object] *= 0.5  # Reduce intensity by 50%
+        for moving_object in moving_bounding_boxes:
+            min_bound = moving_object.min_bound
+            max_bound = moving_object.max_bound
+            in_moving_object = np.all(np.logical_and(lidar_points >= min_bound, lidar_points <= max_bound), axis=1)
+            lidar_color[in_moving_object] *= 5  # Reduce intensity by 50%
 
     # Update the point cloud for visualization
     # point_list.points = o3d.utility.Vector3dVector(combined_points)
-    point_list.points = o3d.utility.Vector3dVector(filtered_points) # lidar_points  lidar_points_roi
+    point_list.points = o3d.utility.Vector3dVector(lidar_points) # lidar_points  lidar_points_roi downsampled_points filtered_points
     point_list.colors = o3d.utility.Vector3dVector(lidar_color) # lidar_color
 
     # Accumulate downsampled points and colors in lidar_live_dict

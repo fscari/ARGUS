@@ -27,21 +27,26 @@ class BoundingBox:
         # Calculate the volume of the bounding box
         return np.prod(self.max_bound - self.min_bound)
 
-def filter_ground_points(points, z_threshold=-2.6):
+def filter_ground_points(points, lidar_color, z_threshold=-2.6):
     # Keep points with z greater than z_threshold
-    return points[points[:, 2] > z_threshold]
+    new_points = points[points[:, 2] > z_threshold]
+    new_colors = lidar_color[points[:, 2] > z_threshold]
+    return new_points, new_colors
 
 
-def downsample_point_cloud(points, voxel_size=0.5):
+def downsample_point_cloud(points, lidar_color, voxel_size=0.5):
     pcd = o3d.geometry.PointCloud()
     pcd.points = o3d.utility.Vector3dVector(points[:, :3])
+    pcd.colors = o3d.utility.Vector3dVector(lidar_color)
     downsampled_pcd = pcd.voxel_down_sample(voxel_size)
     downsampled_points = np.asarray(downsampled_pcd.points)
+    downsampled_colors = np.asarray(downsampled_pcd.colors)
+
     # print(f"Points before downsampling: {len(points)}, after downsampling: {len(downsampled_points)}")
-    return downsampled_points
+    return downsampled_points, downsampled_colors
 
 
-def segment_clusters(points, eps=2, min_samples=5):
+def segment_clusters(points, eps=5, min_samples=10):
     points = np.asarray(points)
     # Perform clustering
     clustering = DBSCAN(eps=eps, min_samples=min_samples).fit(points)
@@ -52,16 +57,23 @@ def segment_clusters(points, eps=2, min_samples=5):
     return labels
 
 
-def remove_small_clusters(points, labels, min_cluster_size=2):
+def remove_small_clusters(points, labels, lidar_color, min_cluster_size=2):
     unique_labels = np.unique(labels)
     filtered_points = []
+    filtered_colors = []
     for label in unique_labels:
         if label == -1:
             continue  # Ignore noise
         cluster_points = points[labels == label]
+        cluster_colors = lidar_color[labels == label]
         if len(cluster_points) >= min_cluster_size:
             filtered_points.append(cluster_points)
-    return np.vstack(filtered_points) if filtered_points else np.empty((0, 3))
+            filtered_colors.append(cluster_colors)
+
+    filtered_points = np.vstack(filtered_points) if filtered_points else np.empty((0, 3))
+    filtered_colors = np.vstack(filtered_colors) if filtered_colors else np.empty((0, 3))
+
+    return filtered_points, filtered_colors
 
 
 def compute_bounding_boxes(points, labels):
@@ -80,7 +92,7 @@ def compute_bounding_boxes(points, labels):
         # Create BoundingBox object
         bounding_box = BoundingBox(min_bound, max_bound)
         bounding_boxes.append(bounding_box)
-
+    # print("Bounding box: ", len(bounding_boxes))
     return bounding_boxes
 
 
@@ -89,8 +101,10 @@ def match_bounding_boxes(prev_boxes, curr_boxes):
     for prev_box in prev_boxes:
         for curr_box in curr_boxes:
             iou = compute_iou(prev_box, curr_box)
-            if iou > 0.75:  # Example IoU threshold
+            if iou > 0.7:  # Example IoU threshold
                 matches.append((prev_box, curr_box))
+                curr_center = (curr_box.min_bound + curr_box.max_bound) / 2
+                # print(curr_center)
     return matches
 
 
@@ -127,7 +141,7 @@ def detect_moving_objects(prev_bounding_boxes, curr_bounding_boxes, displacement
         relative_displacement = bbox_displacement - np.linalg.norm(displacement)
 
         # Check if the object is moving
-        if relative_displacement > 1.15:
+        if relative_displacement > 6:
             moving_objects.append(curr_box)
             print(relative_displacement)
 
