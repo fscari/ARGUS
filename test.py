@@ -9,15 +9,19 @@ from varjo import varjo_yaw_data
 import keyboard
 from multiprocessing import Process, Manager, Event
 import queue
+from preprocess_lidar import create_bounding_box_lines
+import globals
 
 
 def main():
-    global vis, pcd, central_yaw, prev_bounding_boxes, prev_position
+    global vis, pcd, central_yaw, prev_position # prev_bounding_boxes
 
     # Create shared dictionary to save data between multiprocess
     manager = Manager()
     shared_dict = manager.dict()
     lidar_live_dict = {'epoch': [], 'points': [], 'color': []}
+    bbox_geometries = []
+
 
     # Start Varjo process and create event to stop varjo
     stop_event = Event()
@@ -37,15 +41,16 @@ def main():
     frequency = 60
     lidar = lidar_setup(world, blueprint_library, vehicle1, points, frequency, fog_density)
     point_list = o3d.geometry.PointCloud()
-    yaw_angle = shared_dict.get('yaw', None)
-    central_yaw = -np.radians(yaw_angle) # Central vision yaw angle
+    yaw_angle = shared_dict.get('yaw', 0)
+    # print(yaw_angle)
+    central_yaw = -np.radians(yaw_angle)
 
     # Create a queue to store LiDAR data
     data_queue = queue.Queue()
 
     # Wrap the LiDAR callback to use the queue
     lidar.listen(lambda data: lidar_callback_wrapped(vid_range, viridis, data, point_list, shared_dict, data_queue, lidar_live_dict, vehicle1,
-                                                     power_control=False, drivers_gaze=False, lidar_processing=True))
+                                                     power_control=False, drivers_gaze=False, lidar_processing=False, VoxelNet=False))
 
     # Initialize visualizer
     vis = o3d.visualization.Visualizer()
@@ -104,7 +109,21 @@ def main():
         ]))
         vis.update_geometry(gaze_lines)
 
-        vis.update_geometry(point_list)
+
+        # Clear only the previous bounding box geometries
+        for bbox_geom in bbox_geometries:
+            vis.remove_geometry(bbox_geom, reset_bounding_box=False)  # Clear bounding box geometry only
+        bbox_geometries.clear()  # Clear the list of bounding box geometries
+        # Add updated point cloud
+        vis.add_geometry(point_list)
+        # print(globals.prev_bounding_boxes)
+        for bbox in globals.prev_bounding_boxes:  # Use the most recent bounding boxes
+            # print(bbox)
+            bbox_line_set = create_bounding_box_lines(bbox)
+            bbox_geometries.append(bbox_line_set)
+            vis.add_geometry(bbox_line_set)
+
+        # vis.update_geometry(point_list)
         vis.poll_events()
         vis.update_renderer()
         time.sleep(0.005)

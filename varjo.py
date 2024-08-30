@@ -142,5 +142,5 @@ if __name__ == '__main__':
     p.start()
 
     while True:
-        print(shared_dict.get('yaw', 'No data'))
+        print(shared_dict.get('yaw'))
         time.sleep(1)
