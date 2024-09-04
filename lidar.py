@@ -3,18 +3,14 @@ import numpy as np
 import open3d as o3d
 from datetime import datetime
 import pandas as pd
+from preprocess_lidar import filter_ground_points, downsample_point_cloud, segment_clusters, compute_bounding_boxes, detect_moving_objects, filter_road_points,\
+    mark_road_cells, detect_vehicles_in_road_area, create_grid
+import globals
 
-import globals
-from preprocess_lidar import filter_ground_points, downsample_point_cloud, segment_clusters, remove_small_clusters, compute_bounding_boxes, match_bounding_boxes, \
-    compute_iou, detect_moving_objects, filter_road_points, filter_objects_on_road, define_road_area, plot_road_hull
-from voxel_feature_encoding import VFE, voxelize_and_encode
-import globals
-import torch
 
 
 prev_position = carla.Location()
 # prev_bounding_boxes = []
-# print(torch.max)
 def lidar_setup(world, blueprint_library, vehicle, points, frequency, fog_density):
     lidar_bp = blueprint_library.find('sensor.lidar.ray_cast')
     lidar_bp.set_attribute('range', '100')
@@ -29,8 +25,8 @@ def lidar_setup(world, blueprint_library, vehicle, points, frequency, fog_densit
     return lidar
 
 
-def lidar_callback(vid_range, viridis, data, point_list, shared_dict, lidar_live_dict, vehicle, power_control=False, drivers_gaze=False, lidar_processing=False,
-                   VoxelNet=False):
+def lidar_callback(vid_range, viridis, data, point_list, shared_dict, lidar_live_dict, vehicle, grid_cache, power_control=False, drivers_gaze=False,
+                   bounding_box=False, lidar_processing=False):
     global prev_position # prev_bounding_boxes
 
     downsampling_factor = 6
@@ -46,7 +42,7 @@ def lidar_callback(vid_range, viridis, data, point_list, shared_dict, lidar_live
     intensity = data[:, -1]
     central_yaw_deg = -shared_dict.get('yaw', 0)
     if power_control:
-        intensity = adjust_intensity(lidar_points, intensity, central_yaw_deg)
+        lidar_points, intensity = adjust_intensity(lidar_points, intensity, central_yaw_deg)
 
     intensity_col = 1.0 - np.log(np.clip(intensity, a_min=1e-6, a_max=None)) / np.log(np.exp(-0.004 * 100))
     int_color = np.c_[
@@ -70,13 +66,7 @@ def lidar_callback(vid_range, viridis, data, point_list, shared_dict, lidar_live
 
     # Update previous position for the next iteration
     prev_position = curr_position
-    road_points, road_colors, non_road_points, non_road_colors = filter_road_points(lidar_points, lidar_color)
-    # Define the road area using the road points
-    road_hull = define_road_area(road_points)
-    # print(road_hull)
-    # Detect vehicles or objects on the road
-    vehicle_points = filter_objects_on_road(non_road_points, road_hull)
-    # plot_road_hull(road_points, road_hull)
+
     if drivers_gaze:
         # Vectorized mask for points in central vision
         point_yaws = np.degrees(np.arctan2(lidar_points[:, 1], lidar_points[:, 0]))
@@ -94,7 +84,7 @@ def lidar_callback(vid_range, viridis, data, point_list, shared_dict, lidar_live
         lidar_points = np.vstack((downsampled_points, lidar_points[~in_central_vision]))
         lidar_color = np.vstack((downsampled_colors, int_color[~in_central_vision]))
 
-    if lidar_processing:
+    if bounding_box:
         # Testing recognition of vehicles with Lidar
         # Get vehicle's yaw and convert it to radians
         vehicle_yaw = np.radians(vehicle.get_transform().rotation.yaw)
@@ -147,18 +137,37 @@ def lidar_callback(vid_range, viridis, data, point_list, shared_dict, lidar_live
             # lidar_color[in_moving_object] = 0  # Reduce intensity by 50%
         globals.prev_bounding_boxes = bounding_boxes
         # print(prev_bounding_boxes)
-    #
-    if VoxelNet:
-        # Voxelization for VoxelNet
-        voxel_features, voxel_coords = voxelize_and_encode(data)
-        voxel_features_tensor = torch.tensor(voxel_features, dtype=torch.float32)
-        voxel_features_tensor = voxel_features_tensor.view(1, -1, 35, 5)
-        print("Voxel Features Shape:", voxel_features_tensor.shape)
-        # Initialize the VFE network
-        vfe_net = VFE(input_dim=5, num_vfe_layers=2, vfe_dim=64)
-        # Forward pass through the VFE network
-        voxel_features_encoded = vfe_net(voxel_features_tensor)
-        print("Encoded Voxel Features Shape:", voxel_features_encoded.shape)
+
+    if lidar_processing:
+        vehicle_yaw = np.radians(vehicle.get_transform().rotation.yaw)
+        point_angles = np.arctan2(lidar_points[:, 1], lidar_points[:, 0])
+        relative_angles = point_angles - vehicle_yaw
+        relative_angles = relative_angles - np.pi / 2
+        relative_angles = (relative_angles + np.pi) % (2 * np.pi) - np.pi
+        roi_mask = np.abs(relative_angles) <= np.pi / 2
+        lidar_points_roi = lidar_points[roi_mask]
+        lidar_color_roi = lidar_color[roi_mask]
+        road_points, road_colors, non_road_points, non_road_colors = filter_road_points(lidar_points_roi, lidar_color_roi)
+        y_min = road_points[:, 1].min()
+        y_max = road_points[:, 1].max()
+
+        if grid_cache.needs_update(y_min, y_max) or grid_cache.grid is None:  #
+            # Recompute the grid and road cells if needed
+            print('creating the grid')
+            grid = create_grid(road_points, grid_size=1.0)
+            road_cells = mark_road_cells(grid, road_points)
+
+            # Update the cache with the new grid, road cells, and y-values
+            grid_cache.update_cache(grid, road_cells)
+
+        vehicle_points = detect_vehicles_in_road_area(non_road_points, grid_cache.road_mask, grid_size=1.0)
+        if len(vehicle_points) > 0 and (vehicle_points[:, 1] < -10).any(): #and globals.angle_degrees is None:
+            filtered_points = vehicle_points[vehicle_points[:, 1] < -10]
+            highest_point = filtered_points[np.argmax(filtered_points[:, 1])]
+            angle_radians = np.arctan2(highest_point[1], highest_point[0])
+            globals.angle_degrees = np.degrees(angle_radians)
+            globals.time_lidar = datetime.now()
+        # print(globals.angle_degrees)
 
     # Update the point cloud for visualization
     # point_list.points = o3d.utility.Vector3dVector(combined_points)
@@ -178,9 +187,9 @@ def lidar_map(vis):
     axis = o3d.geometry.LineSet()
     axis.points = o3d.utility.Vector3dVector(np.array([
         [0.0, 0.0, 0.0],
-        [1, 0.0, 0.0],  # 100 if VoxelNet
-        [0.0, 1, 0.0],  # 100 if VoxelNet
-        [0.0, 0.0, 1]   # 100 if VoxelNet
+        [1, 0.0, 0.0],
+        [0.0, 1, 0.0],
+        [0.0, 0.0, 1]
     ]))
     axis.lines = o3d.utility.Vector2iVector(np.array([
         [0, 1],
@@ -195,10 +204,10 @@ def lidar_map(vis):
     vis.add_geometry(axis)
 
 
-def lidar_callback_wrapped(vid_range, viridis, data, point_list, shared_dict, data_queue, lidar_live_dict, vehicle, power_control=False, drivers_gaze=False,
-                           lidar_processing=False, VoxelNet=False):
-    lidar_callback(vid_range, viridis, data, point_list, shared_dict, lidar_live_dict, vehicle, power_control=power_control, drivers_gaze=drivers_gaze,
-                   lidar_processing=lidar_processing, VoxelNet=VoxelNet)
+def lidar_callback_wrapped(vid_range, viridis, data, point_list, shared_dict, data_queue, lidar_live_dict, vehicle, grid_cache, power_control=False, drivers_gaze=False,
+                           bounding_box=False, lidar_processing=False):
+    lidar_callback(vid_range, viridis, data, point_list, shared_dict, lidar_live_dict, vehicle, grid_cache, power_control=power_control, drivers_gaze=drivers_gaze,
+                   bounding_box=bounding_box, lidar_processing=lidar_processing)
     data_queue.put(point_list)
 
 
@@ -248,7 +257,7 @@ def adjust_intensity(points, intensity, gaze_angle, field_of_view=60):
     """
     power_reduction_factor = 0.5
     power_increase_factor = 1.1
-
+    threshold = 0.1
     # Convert the field of view to radians
     field_of_view_rad = np.radians(field_of_view)
 
@@ -263,4 +272,9 @@ def adjust_intensity(points, intensity, gaze_angle, field_of_view=60):
     adjusted_intensity = np.copy(intensity)
     adjusted_intensity[in_fov] *= power_reduction_factor
     adjusted_intensity[~in_fov] *= power_increase_factor
-    return adjusted_intensity
+    valid_indices = adjusted_intensity > threshold
+
+    # Filter out points and intensities that don't meet the threshold
+    filtered_points = points[valid_indices]
+    filtered_intensity = adjusted_intensity[valid_indices]
+    return filtered_points, filtered_intensity

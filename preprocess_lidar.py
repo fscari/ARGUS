@@ -2,8 +2,10 @@ import open3d as o3d
 import numpy as np
 from sklearn.cluster import DBSCAN
 from scipy.spatial import ConvexHull
-from shapely.geometry import Polygon, Point
+from shapely.geometry import Polygon, Point, MultiPolygon
 import matplotlib.pyplot as plt
+import alphashape
+from collections import defaultdict
 
 
 class BoundingBox:
@@ -215,42 +217,40 @@ def define_road_area(road_points):
     - road_hull (scipy.spatial.ConvexHull): Convex hull representing the road area in the x-y plane.
     """
 
-    # Project road points onto the x-y plane
     road_xy = road_points[:, :2]
 
-    # Compute the convex hull of the road points in the x-y plane
-    road_hull = ConvexHull(road_xy)
+    # Compute the alpha shape (concave hull)
+    road_alpha_shape = alphashape.alphashape(road_xy, 0.09)
+    # print(road_alpha_shape)
 
-    return road_hull
+    return road_alpha_shape
 
 
-def filter_objects_on_road(non_road_points, road_hull, road_height_threshold=-2.7):
+def filter_objects_on_road(non_road_points, road_polygon, road_height_threshold):
     """
     Filters points that are above the road surface but within the road area, likely representing vehicles.
 
     Args:
     - non_road_points (np.array): N x 3 array of points that are not part of the road.
-    - road_hull (scipy.spatial.ConvexHull): Convex hull representing the road area.
+    - road_polygon (shapely.geometry.Polygon or MultiPolygon): Polygon representing the road area.
     - road_height_threshold (float): The maximum height of the road surface.
 
     Returns:
     - vehicle_points (np.array): Points that are likely vehicles on the road.
     """
 
-    # Create a polygon from the convex hull vertices
-    road_polygon = Polygon(road_hull.points[road_hull.vertices])
-
     vehicle_mask = []
     for point in non_road_points:
         point_xy = Point(point[:2])
-        is_on_road = road_polygon.contains(point_xy)
-        is_above_road = point[2] > road_height_threshold
 
-        # Only keep points that are within the road area and above the road height threshold
-        vehicle_mask.append(is_on_road and is_above_road)
+        # Check if the point is within the road area and above the road height threshold
+        if road_polygon.contains(point_xy) and point[2] > road_height_threshold:
+            vehicle_mask.append(True)
+        else:
+            vehicle_mask.append(False)
 
     vehicle_points = non_road_points[vehicle_mask]
-    print(vehicle_points)
+    # print(vehicle_points)
 
     return vehicle_points
 
@@ -282,4 +282,166 @@ def plot_road_hull(road_points, road_hull):
     plt.xlabel('X Coordinate')
     plt.ylabel('Y Coordinate')
     plt.legend()
+    plt.show()
+
+def plot_road_alpha_shape(road_points, road_alpha_shape):
+    """
+    Plots the road points and their alpha shape (concave hull), handling both Polygon and MultiPolygon.
+
+    Args:
+    - road_points (np.array): N x 3 array of road point cloud coordinates.
+    - road_alpha_shape (shapely.geometry.Polygon or MultiPolygon): Alpha shape representing the road area in the x-y plane.
+    """
+
+    # Project road points onto the x-y plane
+    road_xy = road_points[:, :2]
+
+    # Plot the road points
+    plt.figure(figsize=(10, 8))
+    plt.plot(road_xy[:, 0], road_xy[:, 1], 'o', label='Road Points')
+
+    # Check if the alpha shape is a MultiPolygon or a single Polygon
+    if isinstance(road_alpha_shape, MultiPolygon):
+        for polygon in road_alpha_shape.geoms:  # Iterate over the geometries in the MultiPolygon
+            x, y = polygon.exterior.xy
+            plt.plot(x, y, 'r-', label='Alpha Shape (Road Area)')
+    elif isinstance(road_alpha_shape, Polygon):
+        x, y = road_alpha_shape.exterior.xy
+        plt.plot(x, y, 'r-', label='Alpha Shape (Road Area)')
+    else:
+        raise ValueError("road_alpha_shape must be a Polygon or MultiPolygon")
+
+    plt.title('Road Area Defined by Alpha Shape')
+    plt.xlabel('X Coordinate')
+    plt.ylabel('Y Coordinate')
+    plt.legend()
+    plt.show()
+
+
+def define_road_area_bounding_box(road_points):
+    """
+    Defines the road area using a bounding box approximation.
+
+    Args:
+    - road_points (np.array): N x 3 array of road point cloud coordinates.
+
+    Returns:
+    - bounding_box (shapely.geometry.Polygon): Bounding box representing the road area in the x-y plane.
+    """
+    min_x, min_y = road_points[:, :2].min(axis=0)
+    max_x, max_y = road_points[:, :2].max(axis=0)
+
+    bounding_box = Polygon([
+        (min_x, min_y),
+        (min_x, max_y),
+        (max_x, max_y),
+        (max_x, min_y)
+    ])
+
+    return bounding_box
+
+def plot_bounding_box(road_points, bounding_box):
+    """
+    Plots the road points and the bounding box.
+
+    Args:
+    - road_points (np.array): N x 3 array of road point cloud coordinates.
+    - bounding_box (shapely.geometry.Polygon): Bounding box representing the road area in the x-y plane.
+    """
+    # Plot road points
+    plt.scatter(road_points[:, 0], road_points[:, 1], c='blue', label='Road Points')
+
+    # Plot bounding box
+    if isinstance(bounding_box, Polygon):
+        x, y = bounding_box.exterior.xy
+        plt.plot(x, y, 'r-', label='Bounding Box')
+
+    plt.xlabel('X Coordinate')
+    plt.ylabel('Y Coordinate')
+    plt.title('Road Points with Bounding Box')
+    plt.legend()
+    plt.show()
+
+
+def detect_vehicles_in_road_region(lidar_points, road_points, z_threshold):
+    """
+    Detects points that are likely vehicles within the road area based on shared xy-plane.
+
+    Args:
+    - lidar_points (np.array): N x 3 array of point cloud coordinates.
+    - road_points (np.array): N x 3 array of road point cloud coordinates.
+    - z_threshold (float): Threshold for z-coordinate to identify vehicle points.
+
+    Returns:
+    - vehicle_points (np.array): Points that are likely vehicles on the road.
+    """
+    # Create a set of unique xy coordinates from road points
+    road_xy_set = set(map(tuple, road_points[:, :2]))
+    # print(road_xy_set)
+    # Create a mask for points within the road's xy region and above the z-threshold
+    vehicle_mask = np.array([
+        (tuple(xy[:2]) in road_xy_set) and (xy[2] > z_threshold)
+        for xy in lidar_points
+    ])
+
+    vehicle_points = lidar_points[vehicle_mask]
+    return vehicle_points
+
+
+def create_grid(points, grid_size=1):
+    grid = defaultdict(list)
+    for point in points:
+        grid_x = int(point[0] // grid_size)
+        grid_y = int(point[1] // grid_size)
+        grid[(grid_x, grid_y)].append(point)
+    return grid
+
+def mark_road_cells(grid, road_points, grid_size=1.0):
+    road_cells = set()
+    for point in road_points:
+        grid_x = int(point[0] // grid_size)
+        grid_y = int(point[1] // grid_size)
+        road_cells.add((grid_x, grid_y))
+    return road_cells
+
+def detect_vehicles_in_road_area(lidar_points, road_mask, grid_size=1.0):
+    vehicle_points = []
+    for point in lidar_points:
+        grid_x = int(point[0] // grid_size)
+        grid_y = int(point[1] // grid_size)
+
+        if (grid_x, grid_y) in road_mask  and point[2] >= -2.6:
+            vehicle_points.append(point)
+
+    return np.array(vehicle_points)
+
+
+def visualize_road_mask(road_mask, grid_size=1.0):
+    """
+    Visualizes the road mask by plotting the grid cells that represent the road area.
+
+    Args:
+    - road_mask (set): Set of grid cells (grid_x, grid_y) that represent the road area.
+    - grid_size (float): Size of each grid cell.
+    """
+    fig, ax = plt.subplots()
+
+    for (grid_x, grid_y) in road_mask:
+        # Calculate the bottom-left corner of the grid cell
+        x = grid_x * grid_size
+        y = grid_y * grid_size
+
+        # Create a rectangle patch to represent the grid cell
+        rect = plt.Rectangle((x, y), grid_size, grid_size, edgecolor='blue', facecolor='lightblue', alpha=0.5)
+        ax.add_patch(rect)
+
+    # Set plot limits and labels
+    ax.set_xlim([min(grid_x for grid_x, _ in road_mask) * grid_size - grid_size,
+                 max(grid_x for grid_x, _ in road_mask) * grid_size + grid_size])
+    ax.set_ylim([min(grid_y for _, grid_y in road_mask) * grid_size - grid_size,
+                 max(grid_y for _, grid_y in road_mask) * grid_size + grid_size])
+    ax.set_xlabel('X Coordinate')
+    ax.set_ylabel('Y Coordinate')
+    ax.set_title('Road Mask Visualization')
+    plt.gca().set_aspect('equal', adjustable='box')
     plt.show()

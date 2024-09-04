@@ -15,5 +15,8 @@ def carla_setup():
         for vehicle in vehicle_list:
             if vehicle.type_id == 'vehicle.hapticslab.nissan_fede_training1':
                 vehicle1 = vehicle
+            elif vehicle.type_id == 'vehicle.audi.a2':
+                if vehicle.get_location().x > 0:
+                    vehicle2 = vehicle
 
-    return client, world, current_weather, blueprint_library, vehicle_list, vehicle1
+    return client, world, current_weather, blueprint_library, vehicle_list, vehicle1, vehicle2

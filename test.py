@@ -1,3 +1,4 @@
+import math
 import time
 import carla
 import open3d as o3d
@@ -11,10 +12,13 @@ from multiprocessing import Process, Manager, Event
 import queue
 from preprocess_lidar import create_bounding_box_lines
 import globals
+from grid import GridCache
+from datetime import datetime
 
 
 def main():
     global vis, pcd, central_yaw, prev_position # prev_bounding_boxes
+    grid_cache = GridCache(y_threshold=0.5)
 
     # Create shared dictionary to save data between multiprocess
     manager = Manager()
@@ -29,7 +33,7 @@ def main():
     varjo_process.start()
 
     # Get Carla connection
-    client, world, current_weather, blueprint_library, vehicle_list, vehicle1 = carla_setup()
+    client, world, current_weather, blueprint_library, vehicle_list, vehicle1, vehicle2 = carla_setup()
     fog_density = current_weather.fog_density
 
     # Use updated colormap access
@@ -49,8 +53,8 @@ def main():
     data_queue = queue.Queue()
 
     # Wrap the LiDAR callback to use the queue
-    lidar.listen(lambda data: lidar_callback_wrapped(vid_range, viridis, data, point_list, shared_dict, data_queue, lidar_live_dict, vehicle1,
-                                                     power_control=False, drivers_gaze=False, lidar_processing=False, VoxelNet=False))
+    lidar.listen(lambda data: lidar_callback_wrapped(vid_range, viridis, data, point_list, shared_dict, data_queue, lidar_live_dict, vehicle1, grid_cache,
+                                                     power_control=False, drivers_gaze=True, bounding_box=False, lidar_processing=True))
 
     # Initialize visualizer
     vis = o3d.visualization.Visualizer()
@@ -70,7 +74,8 @@ def main():
     gaze_lines = o3d.geometry.LineSet()
     vis.add_geometry(gaze_lines)
     line_length = 20
-
+    to_check = False
+    first_start = True
     frame = 0
     while True:
         if keyboard.is_pressed('q'):
@@ -90,6 +95,11 @@ def main():
         if frame == 2:
             vis.add_geometry(point_list)
 
+        vel_v2 = vehicle2.get_velocity()
+        vel_v2 = np.sqrt(vel_v2.x**2 + vel_v2.y**2)
+        if vel_v2 > 0 and first_start:
+            globals.time_vehicle = datetime.now()
+            first_start = False
         yaw_angle = -shared_dict.get('yaw', 0)
         yaw_rad = np.radians(yaw_angle)
         gaze_angle_rad = np.radians(30)  # central vision FOV
@@ -111,17 +121,34 @@ def main():
 
 
         # Clear only the previous bounding box geometries
-        for bbox_geom in bbox_geometries:
-            vis.remove_geometry(bbox_geom, reset_bounding_box=False)  # Clear bounding box geometry only
-        bbox_geometries.clear()  # Clear the list of bounding box geometries
-        # Add updated point cloud
+        # for bbox_geom in bbox_geometries:
+        #     vis.remove_geometry(bbox_geom, reset_bounding_box=False)  # Clear bounding box geometry only
+        # bbox_geometries.clear()  # Clear the list of bounding box geometries
+        # # Add updated point cloud
         vis.add_geometry(point_list)
-        # print(globals.prev_bounding_boxes)
-        for bbox in globals.prev_bounding_boxes:  # Use the most recent bounding boxes
-            # print(bbox)
-            bbox_line_set = create_bounding_box_lines(bbox)
-            bbox_geometries.append(bbox_line_set)
-            vis.add_geometry(bbox_line_set)
+        # # print(globals.prev_bounding_boxes)
+        # for bbox in globals.prev_bounding_boxes:  # Use the most recent bounding boxes
+        #     # print(bbox)
+        #     bbox_line_set = create_bounding_box_lines(bbox)
+        #     bbox_geometries.append(bbox_line_set)
+        #     vis.add_geometry(bbox_line_set)
+
+        if globals.angle_degrees is not None and to_check is False:
+            print(f"Vehicle approaching from the right with an angle of {abs(np.round(globals.angle_degrees))}!")
+            if abs(yaw_angle) > abs(globals.angle_degrees):
+                to_check = True
+                globals.time_check = datetime.now()
+
+                time_diff_lidar = globals.time_lidar - globals.time_vehicle
+                time_diff_driver = globals.time_check - globals.time_lidar
+                time_diff_general = globals.time_check - globals.time_vehicle
+                time_diff_lidar = time_diff_lidar.total_seconds()
+                time_diff_driver = time_diff_driver.total_seconds()
+                time_diff_general = time_diff_general.total_seconds()
+                print("Vehicle seen")
+                print(f"LiDAR needed {time_diff_lidar}s")
+                print(f"Driver needed {time_diff_driver}s")
+                print(f"Total time needed {time_diff_general}s")
 
         # vis.update_geometry(point_list)
         vis.poll_events()
