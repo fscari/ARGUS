@@ -132,8 +132,7 @@ def main(file_path, power_control=False, drivers_gaze=False, bounding_box=False,
             total_time = arrival_time - globals.time_vehicle
             total_time = total_time.total_seconds()
             arrived = True
-            # print(arrival_time)
-            # print(total_time)
+            print(f"arrived: {arrival_time}")
 
 
         if globals.angle_degrees is not None and to_check is False:
@@ -179,7 +178,7 @@ if __name__ == '__main__':
             writer = csv.writer(file)
             writer.writerow(["Fog Percentage", "Power Control Status", "TTA"])
 
-    for i in range(20):
+    for i in range(10):
         globals.reset_globals()
         time.sleep(3)
         if i % 2 == 0:
