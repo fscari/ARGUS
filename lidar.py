@@ -62,8 +62,6 @@ def lidar_callback(vid_range, viridis, data, point_list, shared_dict, lidar_live
 
     # After some time, e.g., in the next frame
     curr_position = vehicle.get_location()  # Get current position
-    velocity = vehicle.get_velocity()  # Get current velocity
-    yaw = vehicle.get_transform().rotation.yaw  # Get yaw angle
 
     # Calculate displacement
     displacement = np.sqrt((curr_position.x - prev_position.x) ** 2 +
@@ -174,12 +172,13 @@ def lidar_callback(vid_range, viridis, data, point_list, shared_dict, lidar_live
             globals.angle_degrees = np.degrees(angle_radians)
             if globals.time_lidar is None:
                 globals.time_lidar = datetime.now()
+                print(f"Lidar: {globals.time_lidar}")
         # print(globals.angle_degrees)
 
     # Update the point cloud for visualization
     # point_list.points = o3d.utility.Vector3dVector(combined_points)
-    point_list.points = o3d.utility.Vector3dVector(lidar_points) # lidar_points  lidar_points_roi downsampled_points filtered_points  non_road_points
-    point_list.colors = o3d.utility.Vector3dVector(lidar_color) # lidar_color road_colors non_road_colors
+    point_list.points = o3d.utility.Vector3dVector(non_road_points) # lidar_points  lidar_points_roi downsampled_points filtered_points  non_road_points
+    point_list.colors = o3d.utility.Vector3dVector(non_road_colors) # lidar_color road_colors non_road_colors
 
     # Accumulate downsampled points and colors in lidar_live_dict
     # lidar_live_dict['points'].append(combined_points)
