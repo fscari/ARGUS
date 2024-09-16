@@ -1,3 +1,4 @@
+import csv
 import math
 import time
 import carla
@@ -14,9 +15,10 @@ from preprocess_lidar import create_bounding_box_lines
 import globals
 from grid import GridCache
 from datetime import datetime
+import os
 
 
-def main():
+def main(file_path, power_control=False, drivers_gaze=False, bounding_box=False, lidar_processing=True):
     global vis, pcd, central_yaw, prev_position # prev_bounding_boxes
     grid_cache = GridCache(y_threshold=0.5)
 
@@ -25,6 +27,7 @@ def main():
     shared_dict = manager.dict()
     lidar_live_dict = {'epoch': [], 'points': [], 'color': []}
     bbox_geometries = []
+
 
 
     # Start Varjo process and create event to stop varjo
@@ -54,7 +57,7 @@ def main():
 
     # Wrap the LiDAR callback to use the queue
     lidar.listen(lambda data: lidar_callback_wrapped(vid_range, viridis, data, point_list, shared_dict, data_queue, lidar_live_dict, vehicle1, grid_cache,
-                                                     power_control=False, drivers_gaze=True, bounding_box=False, lidar_processing=True))
+                                                     power_control=power_control, drivers_gaze=drivers_gaze, bounding_box=bounding_box, lidar_processing=lidar_processing))
 
     # Initialize visualizer
     vis = o3d.visualization.Visualizer()
@@ -76,9 +79,13 @@ def main():
     line_length = 20
     to_check = False
     first_start = True
+    arrived = False
     frame = 0
     while True:
-        if keyboard.is_pressed('q'):
+        if keyboard.is_pressed('q') or vehicle1.get_location().x == 0:
+            TTA = arrival_time - globals.time_lidar
+            TTA = TTA.total_seconds()
+            print(f'Driver warned {TTA} seconds before TTA')
             print("Stopping the loop and destroying the lidar sensor...")
             lidar.destroy()
             stop_event.set()  # Signal Varjo process to stop
@@ -119,30 +126,27 @@ def main():
         ]))
         vis.update_geometry(gaze_lines)
 
-
-        # Clear only the previous bounding box geometries
-        # for bbox_geom in bbox_geometries:
-        #     vis.remove_geometry(bbox_geom, reset_bounding_box=False)  # Clear bounding box geometry only
-        # bbox_geometries.clear()  # Clear the list of bounding box geometries
-        # # Add updated point cloud
         vis.add_geometry(point_list)
-        # # print(globals.prev_bounding_boxes)
-        # for bbox in globals.prev_bounding_boxes:  # Use the most recent bounding boxes
-        #     # print(bbox)
-        #     bbox_line_set = create_bounding_box_lines(bbox)
-        #     bbox_geometries.append(bbox_line_set)
-        #     vis.add_geometry(bbox_line_set)
+        if vehicle2.get_location().x <= 1.75 and arrived is False:
+            arrival_time = datetime.now()
+            total_time = arrival_time - globals.time_vehicle
+            total_time = total_time.total_seconds()
+            arrived = True
+            # print(arrival_time)
+            # print(total_time)
+
 
         if globals.angle_degrees is not None and to_check is False:
             print(f"Vehicle approaching from the right with an angle of {abs(np.round(globals.angle_degrees))}!")
+            # vehicle1.get_control().gear = 1
+            time_diff_lidar = globals.time_lidar - globals.time_vehicle
+            time_diff_lidar = time_diff_lidar.total_seconds()
+            # print(f"LiDAR needed {time_diff_lidar}s")
             if abs(yaw_angle) > abs(globals.angle_degrees):
                 to_check = True
                 globals.time_check = datetime.now()
-
-                time_diff_lidar = globals.time_lidar - globals.time_vehicle
                 time_diff_driver = globals.time_check - globals.time_lidar
                 time_diff_general = globals.time_check - globals.time_vehicle
-                time_diff_lidar = time_diff_lidar.total_seconds()
                 time_diff_driver = time_diff_driver.total_seconds()
                 time_diff_general = time_diff_general.total_seconds()
                 print("Vehicle seen")
@@ -159,6 +163,28 @@ def main():
     # Cleanup
     vis.destroy_window()
     varjo_process.terminate()
+    with open(file_path, mode='a', newline='') as file:
+        writer = csv.writer(file)
+        writer.writerow([fog_density, power_control, TTA])
+
 
 if __name__ == '__main__':
-    main()
+    # Define the directory and file name
+    directory = directory = r'C:\Users\localadmin\PycharmProjects\Argus\TTA_data'
+    date_today = datetime.now().strftime('%Y-%m-%d')
+    file_name = fr'results_{date_today}.csv'
+    file_path = os.path.join(directory, file_name)
+    if not os.path.exists(file_path):
+        with open(file_path, mode='w', newline='') as file:
+            writer = csv.writer(file)
+            writer.writerow(["Fog Percentage", "Power Control Status", "TTA"])
+
+    for i in range(20):
+        globals.reset_globals()
+        time.sleep(3)
+        if i % 2 == 0:
+            power_control = True
+        else:
+            power_control = False
+        print(f'Power control active: {power_control}')
+        main(file_path, power_control=power_control)

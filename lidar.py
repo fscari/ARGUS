@@ -41,8 +41,14 @@ def lidar_callback(vid_range, viridis, data, point_list, shared_dict, lidar_live
     lidar_points[:, :1] = -lidar_points[:, :1]  # Flip the x axis
     intensity = data[:, -1]
     central_yaw_deg = -shared_dict.get('yaw', 0)
+    threshold = 0.1
     if power_control:
-        lidar_points, intensity = adjust_intensity(lidar_points, intensity, central_yaw_deg)
+        lidar_points, intensity = adjust_intensity(lidar_points, intensity, central_yaw_deg, threshold)
+    else:
+        # Filter out points and intensities that don't meet the threshold
+        valid_indices = intensity > threshold
+        lidar_points = lidar_points[valid_indices]
+        intensity = intensity[valid_indices]
 
     intensity_col = 1.0 - np.log(np.clip(intensity, a_min=1e-6, a_max=None)) / np.log(np.exp(-0.004 * 100))
     int_color = np.c_[
@@ -166,13 +172,14 @@ def lidar_callback(vid_range, viridis, data, point_list, shared_dict, lidar_live
             highest_point = filtered_points[np.argmax(filtered_points[:, 1])]
             angle_radians = np.arctan2(highest_point[1], highest_point[0])
             globals.angle_degrees = np.degrees(angle_radians)
-            globals.time_lidar = datetime.now()
+            if globals.time_lidar is None:
+                globals.time_lidar = datetime.now()
         # print(globals.angle_degrees)
 
     # Update the point cloud for visualization
     # point_list.points = o3d.utility.Vector3dVector(combined_points)
-    point_list.points = o3d.utility.Vector3dVector(non_road_points) # lidar_points  lidar_points_roi downsampled_points filtered_points  non_road_points
-    point_list.colors = o3d.utility.Vector3dVector(non_road_colors) # lidar_color road_colors non_road_colors
+    point_list.points = o3d.utility.Vector3dVector(lidar_points) # lidar_points  lidar_points_roi downsampled_points filtered_points  non_road_points
+    point_list.colors = o3d.utility.Vector3dVector(lidar_color) # lidar_color road_colors non_road_colors
 
     # Accumulate downsampled points and colors in lidar_live_dict
     # lidar_live_dict['points'].append(combined_points)
@@ -240,7 +247,7 @@ def save_lidar_data(lidar_live_dict):
     print(f"Lidar data saved to {location}")
 
 
-def adjust_intensity(points, intensity, gaze_angle, field_of_view=60):
+def adjust_intensity(points, intensity, gaze_angle, threshold, field_of_view=60):
     """
     Adjusts the intensity of the LiDAR points based on the driver's gaze angle and field of view.
 
@@ -257,7 +264,6 @@ def adjust_intensity(points, intensity, gaze_angle, field_of_view=60):
     """
     power_reduction_factor = 0.5
     power_increase_factor = 1.1
-    threshold = 0.1
     # Convert the field of view to radians
     field_of_view_rad = np.radians(field_of_view)
 
@@ -272,9 +278,9 @@ def adjust_intensity(points, intensity, gaze_angle, field_of_view=60):
     adjusted_intensity = np.copy(intensity)
     adjusted_intensity[in_fov] *= power_reduction_factor
     adjusted_intensity[~in_fov] *= power_increase_factor
-    valid_indices = adjusted_intensity > threshold
 
     # Filter out points and intensities that don't meet the threshold
+    valid_indices = adjusted_intensity > threshold
     filtered_points = points[valid_indices]
     filtered_intensity = adjusted_intensity[valid_indices]
     return filtered_points, filtered_intensity
