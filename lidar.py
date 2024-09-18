@@ -26,10 +26,10 @@ def lidar_setup(world, blueprint_library, vehicle, points, frequency, fog_densit
 
 
 def lidar_callback(vid_range, viridis, data, point_list, shared_dict, lidar_live_dict, vehicle, grid_cache, power_control=False, drivers_gaze=False,
-                   bounding_box=False, lidar_processing=False):
+                   bounding_box=False, lidar_processing=False, less_Hz=False):
     global prev_position # prev_bounding_boxes
 
-    downsampling_factor = 6
+    downsampling_factor = 1.5
     # Copy and reshape the LiDAR data
     data = np.copy(np.frombuffer(data.raw_data, dtype=np.dtype('f4')))
     data = np.reshape(data, (int(data.shape[0] / 4), 4))
@@ -78,15 +78,18 @@ def lidar_callback(vid_range, viridis, data, point_list, shared_dict, lidar_live
 
         # Downsample points in central vision
         central_vision_points = lidar_points[in_central_vision]
-        central_vision_colors = int_color[in_central_vision]
+        central_vision_colors = lidar_color[in_central_vision]
 
-        downsampled_indices = np.arange(0, len(central_vision_points), downsampling_factor)
+        num_points = len(central_vision_points)
+        downsampled_indices = np.linspace(0, num_points - 1, int(num_points / downsampling_factor)).astype(int)
+        downsampled_indices = np.clip(downsampled_indices, 0, num_points - 1)
+        # downsampled_indices = np.arange(0, len(central_vision_points), downsampling_factor)
         downsampled_points = central_vision_points[downsampled_indices]
         downsampled_colors = central_vision_colors[downsampled_indices]
 
         # Combine downsampled central vision points with non-downsampled peripheral points
         lidar_points = np.vstack((downsampled_points, lidar_points[~in_central_vision]))
-        lidar_color = np.vstack((downsampled_colors, int_color[~in_central_vision]))
+        lidar_color = np.vstack((downsampled_colors, lidar_color[~in_central_vision]))
 
     if bounding_box:
         # Testing recognition of vehicles with Lidar
@@ -211,9 +214,9 @@ def lidar_map(vis):
 
 
 def lidar_callback_wrapped(vid_range, viridis, data, point_list, shared_dict, data_queue, lidar_live_dict, vehicle, grid_cache, power_control=False, drivers_gaze=False,
-                           bounding_box=False, lidar_processing=False):
+                           bounding_box=False, lidar_processing=False, less_Hz=False):
     lidar_callback(vid_range, viridis, data, point_list, shared_dict, lidar_live_dict, vehicle, grid_cache, power_control=power_control, drivers_gaze=drivers_gaze,
-                   bounding_box=bounding_box, lidar_processing=lidar_processing)
+                   bounding_box=bounding_box, lidar_processing=lidar_processing, less_Hz=less_Hz)
     data_queue.put(point_list)
 
 

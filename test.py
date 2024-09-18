@@ -18,7 +18,7 @@ from datetime import datetime
 import os
 
 
-def main(file_path, power_control=False, drivers_gaze=False, bounding_box=False, lidar_processing=True):
+def main(file_path, power_control=False, drivers_gaze=False, bounding_box=False, lidar_processing=True, less_Hz=False):
     global vis, pcd, central_yaw, prev_position # prev_bounding_boxes
     grid_cache = GridCache(y_threshold=0.5)
 
@@ -45,7 +45,11 @@ def main(file_path, power_control=False, drivers_gaze=False, bounding_box=False,
 
     # Set lidar
     points = 500000
-    frequency = 60
+    if drivers_gaze:
+        frequency = 30
+    else:
+        frequency = 20
+        # frequency = 60
     lidar = lidar_setup(world, blueprint_library, vehicle1, points, frequency, fog_density)
     point_list = o3d.geometry.PointCloud()
     yaw_angle = shared_dict.get('yaw', 0)
@@ -57,7 +61,8 @@ def main(file_path, power_control=False, drivers_gaze=False, bounding_box=False,
 
     # Wrap the LiDAR callback to use the queue
     lidar.listen(lambda data: lidar_callback_wrapped(vid_range, viridis, data, point_list, shared_dict, data_queue, lidar_live_dict, vehicle1, grid_cache,
-                                                     power_control=power_control, drivers_gaze=drivers_gaze, bounding_box=bounding_box, lidar_processing=lidar_processing))
+                                                     power_control=power_control, drivers_gaze=drivers_gaze, bounding_box=bounding_box, lidar_processing=lidar_processing,
+                                                     less_Hz=less_Hz))
 
     # Initialize visualizer
     vis = o3d.visualization.Visualizer()
@@ -178,7 +183,7 @@ if __name__ == '__main__':
             writer = csv.writer(file)
             writer.writerow(["Fog Percentage", "Power Control Status", "TTA"])
 
-    for i in range(10):
+    for i in range(1):
         globals.reset_globals()
         time.sleep(3)
         if i % 2 == 0:
@@ -186,4 +191,4 @@ if __name__ == '__main__':
         else:
             power_control = False
         print(f'Power control active: {power_control}')
-        main(file_path, power_control=power_control)
+        main(file_path, power_control=power_control, drivers_gaze=True)
