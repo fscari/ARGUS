@@ -404,13 +404,14 @@ def mark_road_cells(grid, road_points, grid_size=1.0):
         road_cells.add((grid_x, grid_y))
     return road_cells
 
-def detect_vehicles_in_road_area(lidar_points, road_mask, grid_size=1.0):
+
+def detect_vehicles_in_road_area(non_road_points, road_mask, grid_size=0.5):
     vehicle_points = []
-    for point in lidar_points:
+    for point in non_road_points:
         grid_x = int(point[0] // grid_size)
         grid_y = int(point[1] // grid_size)
 
-        if (grid_x, grid_y) in road_mask  and point[2] >= -2.6:
+        if (grid_x, grid_y) in road_mask and point[2] >= -2.6:
             vehicle_points.append(point)
 
     return np.array(vehicle_points)

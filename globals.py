@@ -1,7 +1,7 @@
 prev_bounding_boxes = []
 angle_degrees = None
 time_lidar = None
-time_vehicle = None
+time_vehicle = 0
 time_check = None
 
 
@@ -10,5 +10,5 @@ def reset_globals():
     prev_bounding_boxes = []
     angle_degrees = None
     time_lidar = None
-    time_vehicle = None
+    time_vehicle = 0
     time_check = None

@@ -3,7 +3,7 @@ import time
 import open3d as o3d
 import numpy as np
 from matplotlib import colormaps
-from lidar import lidar_setup, lidar_callback_wrapped, lidar_map, save_lidar_data
+from lidar2 import lidar_setup, lidar_callback_wrapped, lidar_map
 from carla_setup import carla_setup
 from varjo import varjo_yaw_data
 import keyboard
@@ -15,7 +15,7 @@ from datetime import datetime
 import os
 
 
-def main(file_path, power_control=False, drivers_gaze=False, bounding_box=False, lp=True, less_Hz=False):
+def main(file_path, power_control=False, drivers_gaze=False, lp=True):
     global vis, pcd, central_yaw, prev_position # prev_bounding_boxes
     grid_cache = GridCache(y_threshold=0.5)
 
@@ -31,7 +31,8 @@ def main(file_path, power_control=False, drivers_gaze=False, bounding_box=False,
 
     # Get Carla connection
     client, world, current_weather, blueprint_library, vehicle_list, vehicle1, vehicle2 = carla_setup()
-    fog_density = current_weather.fog_density
+    # fog_density = current_weather.fog_density
+    fog_density = 50
 
     # Use updated colormap access
     viridis = np.array(colormaps['plasma'].colors)
@@ -43,7 +44,6 @@ def main(file_path, power_control=False, drivers_gaze=False, bounding_box=False,
         frequency = 30
     else:
         frequency = 20
-        # frequency = 60
     lidar = lidar_setup(world, blueprint_library, vehicle1, points, frequency, fog_density)
     point_list = o3d.geometry.PointCloud()
     yaw_angle = shared_dict.get('yaw', 0)
@@ -53,10 +53,10 @@ def main(file_path, power_control=False, drivers_gaze=False, bounding_box=False,
     data_queue = queue.Queue()
 
     # Wrap the LiDAR callback to use the queue
-    lidar.listen(lambda data: lidar_callback_wrapped(vid_range, viridis, data, point_list, shared_dict, data_queue, lidar_live_dict, vehicle1, grid_cache,
-                                                     power_control=power_control, drivers_gaze=drivers_gaze, bounding_box=bounding_box, lidar_processing=lp))
+    lidar.listen(lambda data: lidar_callback_wrapped(vid_range, viridis, data, point_list, shared_dict, data_queue, lidar_live_dict, vehicle1, grid_cache, fog_density,
+                                                     power_control=power_control, drivers_gaze=drivers_gaze, lidar_processing=lp))
 
-    # Initialize visualizer
+    # # Initialize visualizer
     # vis = o3d.visualization.Visualizer()
     # vis.create_window(
     #     window_name='Lidar',
@@ -69,10 +69,11 @@ def main(file_path, power_control=False, drivers_gaze=False, bounding_box=False,
     # vis.get_render_option().point_size = 1
     # vis.get_render_option().show_coordinate_frame = True
     # lidar_map(vis)
-
-    # Initialize gaze lines
+    #
+    # # Initialize gaze lines
     # gaze_lines = o3d.geometry.LineSet()
     # vis.add_geometry(gaze_lines)
+
     line_length = 20
     to_check = False
     first_start = True
@@ -100,9 +101,6 @@ def main(file_path, power_control=False, drivers_gaze=False, bounding_box=False,
             point_list.points = new_data.points
             point_list.colors = new_data.colors
 
-        # if frame == 2:
-            # vis.add_geometry(point_list)
-
         vel_v2 = vehicle2.get_velocity()
         vel_v2 = np.sqrt(vel_v2.x**2 + vel_v2.y**2)
         if vel_v2 > 0 and first_start:
@@ -127,12 +125,11 @@ def main(file_path, power_control=False, drivers_gaze=False, bounding_box=False,
         #     [1.0, 1.0, 0.0]
         # ]))
         # vis.update_geometry(gaze_lines)
-
+        #
         # vis.add_geometry(point_list)
         if vehicle2.get_location().x <= 1.75 and arrived is False:
             arrival_time = datetime.now()
             total_time = arrival_time - globals.time_vehicle
-            total_time = total_time.total_seconds()
             arrived = True
             velocity = vel_v2
             print(f"arrived: {arrival_time}")
@@ -158,7 +155,7 @@ def main(file_path, power_control=False, drivers_gaze=False, bounding_box=False,
         # time.sleep(0.005)
         frame += 1
 
-    # Cleanup
+        # Cleanup
     # vis.destroy_window()
     varjo_process.terminate()
     if velocity > 18:
@@ -184,35 +181,10 @@ if __name__ == '__main__':
             writer = csv.writer(file)
             writer.writerow(["Fog Percentage", "Velocity", "Power Control Status", "Frequency Control Status", "TTA"])
     count = 0
-    # for i in range(60):  # 60
-    #     globals.reset_globals()
-    #     time.sleep(1)
-    #     if count == 0 or count == 4 or count == 8 or count == 12 or count == 16 or count == 20 or count == 24 or count == 28 or count == 32 or count == 36 \
-    #             or count == 40 or count == 44 or count == 48 or count == 52 or count == 56:
-    #         power_control = False
-    #         drivers_gaze = False
-    #         print(f"Condition ln")
-    #     elif count == 1 or count == 5 or count == 9 or count == 13 or count == 17 or count == 21 or count == 25 or count == 29 or count == 33 or count == 37 \
-    #             or count == 41 or count == 45 or count == 49 or count == 53 or count == 57:
-    #         power_control = True
-    #         drivers_gaze = False
-    #         print(f"Condition lpci")
-    #     elif count == 2 or count == 6 or count == 10 or count == 14 or count == 18 or count == 22 or count == 26 or count == 30 or count == 34 or count == 38 \
-    #          or count == 42 or count == 46 or count == 50 or count == 54 or count == 58:
-    #         power_control = False
-    #         drivers_gaze = True
-    #         print(f"Condition lpcf")
-    #     elif count == 3 or count == 7 or count == 11 or count == 15 or count == 19 or count == 23 or count == 27 or count == 31 or count == 35 or count == 39 \
-    #          or count == 43 or count == 47 or count == 51 or count == 55 or count == 59:
-    #         power_control = True
-    #         drivers_gaze = True
-    #         print(f"Condition lpcif")
-    #     print(f'Power control intensity active: {power_control}')
-        # print(f'Power control frequency active: {drivers_gaze}')
-    for i in range(180):
+    for i in range(2):
         globals.reset_globals()
         time.sleep(1)
-        if count % 2 ==0:
+        if count % 2 == 0 :
             power_control = False
             drivers_gaze = False
             print(f"Condition ln")

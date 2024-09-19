@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 
 # Load the data from the CSV file
-file_path = r'C:/Users/localadmin/PycharmProjects/Argus/TTA_data/results_2024-09-17.csv'  # Replace <date> with the actual date or use a variable
+file_path = r'C:/Users/localadmin/PycharmProjects/Argus/TTA_data/results_2024-09-19.csv'  # Replace <date> with the actual date or use a variable results_2024-09-17
 data = pd.read_csv(file_path)
 # Convert Power Control Status to categorical
 data['Power Control Status'] = data['Power Control Status'].astype('category')
