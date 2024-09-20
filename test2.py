@@ -15,7 +15,7 @@ from datetime import datetime
 import os
 
 
-def main(file_path, power_control=False, drivers_gaze=False, lp=True):
+def main(file_path, fog_density, power_control=False, drivers_gaze=False, lp=True):
     global vis, pcd, central_yaw, prev_position # prev_bounding_boxes
     grid_cache = GridCache(y_threshold=0.5)
 
@@ -32,7 +32,7 @@ def main(file_path, power_control=False, drivers_gaze=False, lp=True):
     # Get Carla connection
     client, world, current_weather, blueprint_library, vehicle_list, vehicle1, vehicle2 = carla_setup()
     # fog_density = current_weather.fog_density
-    fog_density = 50
+    fog_density = fog_density
 
     # Use updated colormap access
     viridis = np.array(colormaps['plasma'].colors)
@@ -125,7 +125,7 @@ def main(file_path, power_control=False, drivers_gaze=False, lp=True):
         #     [1.0, 1.0, 0.0]
         # ]))
         # vis.update_geometry(gaze_lines)
-        #
+
         # vis.add_geometry(point_list)
         if vehicle2.get_location().x <= 1.75 and arrived is False:
             arrival_time = datetime.now()
@@ -180,8 +180,9 @@ if __name__ == '__main__':
         with open(file_path, mode='w', newline='') as file:
             writer = csv.writer(file)
             writer.writerow(["Fog Percentage", "Velocity", "Power Control Status", "Frequency Control Status", "TTA"])
+    fog_density = 100
     count = 0
-    for i in range(2):
+    for i in range(90):
         globals.reset_globals()
         time.sleep(1)
         if count % 2 == 0 :
@@ -194,4 +195,4 @@ if __name__ == '__main__':
             print(f"Condition lpci")
         print(f'Power control intensity active: {power_control}')
         count += 1
-        main(file_path, power_control=power_control, drivers_gaze=drivers_gaze)
+        main(file_path, fog_density, power_control=power_control, drivers_gaze=drivers_gaze)

@@ -38,6 +38,16 @@ def lidar_callback(vid_range, viridis, data, point_list, shared_dict, lidar_live
     max_additional_attenuation = 0.1  # Increased to allow higher attenuation
     attenuation_rate = base_attenuation + (fog_density / 100.0) ** 2 * max_additional_attenuation
 
+    # Paper Influence and analysis of atmospheric attenuation on the performance of virtual lidar
+    attenuation_rate = base_attenuation + (5.4 * fog_density / 100.0)
+
+    if fog_density == 100:
+        intensity_threshold = 0.0041
+    elif fog_density == 50:
+        intensity_threshold = 0.055
+    else:
+        intensity_threshold = 0
+
     # Copy and reshape the LiDAR data
     data = np.copy(np.frombuffer(data.raw_data, dtype=np.dtype('f4')))
     data = np.reshape(data, (int(data.shape[0] / 4), 4))
@@ -49,14 +59,14 @@ def lidar_callback(vid_range, viridis, data, point_list, shared_dict, lidar_live
     lidar_points[:, :1] = -lidar_points[:, :1]  # Flip the x axis
     intensity = data[:, -1]
     central_yaw_deg = -shared_dict.get('yaw', 0)
-    threshold = 0.1
+
 
     if power_control:
-        adjusted_intensity = adjust_intensity(lidar_points, intensity, central_yaw_deg, threshold)
+        adjusted_intensity = adjust_intensity(lidar_points, intensity, central_yaw_deg)
     else:
         adjusted_intensity = intensity
 
-    lidar_points, attenuated_intensity = apply_attenuation(lidar_points, adjusted_intensity, attenuation_rate)
+    lidar_points, attenuated_intensity = apply_attenuation(lidar_points, adjusted_intensity, attenuation_rate, intensity_threshold)
 
     intensity_col = 1.0 - np.log(np.clip(attenuated_intensity, a_min=1e-6, a_max=None)) / np.log(np.exp(-0.004 * 100))
     int_color = np.c_[
@@ -115,14 +125,14 @@ def lidar_callback(vid_range, viridis, data, point_list, shared_dict, lidar_live
             vehicle_points = detect_vehicles_in_road_area(non_road_points, grid_cache.road_mask, grid_size=1.0)
             if len(vehicle_points) > 0 and (vehicle_points[:, 1] < -10).any():
                 filtered_points = vehicle_points[vehicle_points[:, 1] < -10]
-                # if (filtered_points[:, 0] > 9).any():
-                highest_point = filtered_points[np.argmax(filtered_points[:, 1])]
-                angle_radians = np.arctan2(highest_point[1], highest_point[0])
-                if globals.time_lidar is None:
-                    print(filtered_points)
-                    globals.time_lidar = datetime.now()
-                    print(f"Lidar: {globals.time_lidar}")
-                globals.angle_degrees = np.degrees(angle_radians)
+                if (filtered_points[:, 0] > 8).any():
+                    highest_point = filtered_points[np.argmax(filtered_points[:, 1])]
+                    angle_radians = np.arctan2(highest_point[1], highest_point[0])
+                    if globals.time_lidar is None:
+                        print(filtered_points)
+                        globals.time_lidar = datetime.now()
+                        print(f"Lidar: {globals.time_lidar}")
+                    globals.angle_degrees = np.degrees(angle_radians)
     # # Update the point cloud for visualization
     # point_list.points = o3d.utility.Vector3dVector(lidar_points) # lidar_points  lidar_points_roi downsampled_points filtered_points  non_road_points
     # point_list.colors = o3d.utility.Vector3dVector(lidar_color) # lidar_color road_colors non_road_colors
@@ -191,12 +201,12 @@ def save_lidar_data(lidar_live_dict):
     print(f"Lidar data saved to {location}")
 
 
-def adjust_intensity(points, intensity, gaze_angle, threshold, field_of_view=60):
+def adjust_intensity(points, intensity, gaze_angle, field_of_view=60):
     power_reduction_factor = 0.5
-    # power_increase_factor = 1.1
+    power_increase_factor = 1.1
     # power_reduction_factor = 0
-    # power_increase_factor = 1.5
-    power_increase_factor = 2.75
+    # power_increase_factor = 1.25
+    # power_increase_factor = 2.75
 
     # Compute the angle of each point relative to the driver's gaze
     point_yaws = np.degrees(np.arctan2(points[:, 1], points[:, 0]))
@@ -213,13 +223,13 @@ def adjust_intensity(points, intensity, gaze_angle, threshold, field_of_view=60)
     return adjusted_intensity
 
 
-def apply_attenuation(points, adjusted_intensity, attenuation_rate, intensity_threshold=0.07):
+def apply_attenuation(points, adjusted_intensity, attenuation_rate, intensity_threshold):
     # Calculate distances of each point from the LiDAR sensor
     distances = np.linalg.norm(points, axis=1)
 
     # Apply atmospheric attenuation
-    attenuated_intensity = adjusted_intensity * np.exp(-attenuation_rate * distances)
-
+    # attenuated_intensity = adjusted_intensity * np.exp(-attenuation_rate * distances)
+    attenuated_intensity = adjusted_intensity * np.exp(-attenuation_rate)
     # Apply intensity threshold
     valid_indices = attenuated_intensity >= intensity_threshold
     attenuated_points = points[valid_indices]
