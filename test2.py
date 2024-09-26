@@ -3,7 +3,7 @@ import time
 import open3d as o3d
 import numpy as np
 from matplotlib import colormaps
-from lidar2 import lidar_setup, lidar_callback_wrapped, lidar_map
+from lidar2 import lidar_setup, lidar_callback_wrapped, lidar_map, save_lidar_data
 from carla_setup import carla_setup
 from varjo import varjo_yaw_data
 import keyboard
@@ -39,9 +39,9 @@ def main(file_path, fog_density, power_control=False, drivers_gaze=False, lp=Tru
     vid_range = np.linspace(0.0, 1.0, viridis.shape[0])
 
     # Set lidar
-    points = 500000
+    points = 500000 # 500000
     if drivers_gaze:
-        frequency = 30
+        frequency = 27.5
     else:
         frequency = 20
     lidar = lidar_setup(world, blueprint_library, vehicle1, points, frequency, fog_density)
@@ -56,23 +56,23 @@ def main(file_path, fog_density, power_control=False, drivers_gaze=False, lp=Tru
     lidar.listen(lambda data: lidar_callback_wrapped(vid_range, viridis, data, point_list, shared_dict, data_queue, lidar_live_dict, vehicle1, grid_cache, fog_density,
                                                      power_control=power_control, drivers_gaze=drivers_gaze, lidar_processing=lp))
 
-    # # Initialize visualizer
-    # vis = o3d.visualization.Visualizer()
-    # vis.create_window(
-    #     window_name='Lidar',
-    #     width=960,
-    #     height=540,
-    #     left=480,
-    #     top=270
-    # )
-    # vis.get_render_option().background_color = [0.05, 0.05, 0.05]
-    # vis.get_render_option().point_size = 1
-    # vis.get_render_option().show_coordinate_frame = True
-    # lidar_map(vis)
-    #
-    # # Initialize gaze lines
-    # gaze_lines = o3d.geometry.LineSet()
-    # vis.add_geometry(gaze_lines)
+    # Initialize visualizer
+    vis = o3d.visualization.Visualizer()
+    vis.create_window(
+        window_name='Lidar',
+        width=960,
+        height=540,
+        left=480,
+        top=270
+    )
+    vis.get_render_option().background_color = [0.05, 0.05, 0.05]
+    vis.get_render_option().point_size = 1
+    vis.get_render_option().show_coordinate_frame = True
+    lidar_map(vis)
+
+    # Initialize gaze lines
+    gaze_lines = o3d.geometry.LineSet()
+    vis.add_geometry(gaze_lines)
 
     line_length = 20
     to_check = False
@@ -92,7 +92,7 @@ def main(file_path, fog_density, power_control=False, drivers_gaze=False, lp=Tru
             lidar.destroy()
             stop_event.set()  # Signal Varjo process to stop
             varjo_process.join()  # Wait for Varjo process to finish
-            # save_lidar_data(lidar_live_dict)  # Save LiDAR data to CSV
+            save_lidar_data(lidar_live_dict)  # Save LiDAR data to CSV
             break
 
         # Update the point cloud if new data is available
@@ -115,18 +115,18 @@ def main(file_path, fog_density, power_control=False, drivers_gaze=False, lp=Tru
             [line_length * np.cos(yaw_rad + gaze_angle_rad), line_length * np.sin(yaw_rad + gaze_angle_rad), 0.0],
             [line_length * np.cos(yaw_rad - gaze_angle_rad), line_length * np.sin(yaw_rad - gaze_angle_rad), 0.0]
         ])
-        # gaze_lines.points = o3d.utility.Vector3dVector(gaze_points)
-        # gaze_lines.lines = o3d.utility.Vector2iVector(np.array([
-        #     [0, 1],
-        #     [0, 2]
-        # ]))
-        # gaze_lines.colors = o3d.utility.Vector3dVector(np.array([
-        #     [1.0, 1.0, 0.0],
-        #     [1.0, 1.0, 0.0]
-        # ]))
-        # vis.update_geometry(gaze_lines)
+        gaze_lines.points = o3d.utility.Vector3dVector(gaze_points)
+        gaze_lines.lines = o3d.utility.Vector2iVector(np.array([
+            [0, 1],
+            [0, 2]
+        ]))
+        gaze_lines.colors = o3d.utility.Vector3dVector(np.array([
+            [1.0, 1.0, 0.0],
+            [1.0, 1.0, 0.0]
+        ]))
+        vis.update_geometry(gaze_lines)
 
-        # vis.add_geometry(point_list)
+        vis.add_geometry(point_list)
         if vehicle2.get_location().x <= 1.75 and arrived is False:
             arrival_time = datetime.now()
             total_time = arrival_time - globals.time_vehicle
@@ -150,13 +150,13 @@ def main(file_path, fog_density, power_control=False, drivers_gaze=False, lp=Tru
                 print(f"Driver needed {time_diff_driver}s")
                 print(f"Total time needed {time_diff_general}s")
 
-        # vis.poll_events()
-        # vis.update_renderer()
-        # time.sleep(0.005)
+        vis.poll_events()
+        vis.update_renderer()
+        time.sleep(0.005)
         frame += 1
 
         # Cleanup
-    # vis.destroy_window()
+    vis.destroy_window()
     varjo_process.terminate()
     if velocity > 18:
         velocity = 70
@@ -180,18 +180,18 @@ if __name__ == '__main__':
         with open(file_path, mode='w', newline='') as file:
             writer = csv.writer(file)
             writer.writerow(["Fog Percentage", "Velocity", "Power Control Status", "Frequency Control Status", "TTA"])
-    fog_density = 100
-    count = 0
-    for i in range(90):
+    fog_density = 50
+    count = 1
+    for i in range(1): # 90
         globals.reset_globals()
         time.sleep(1)
-        if count % 2 == 0 :
+        if count % 2 == 0:
             power_control = False
-            drivers_gaze = False
+            drivers_gaze = True
             print(f"Condition ln")
         else:
             power_control = True
-            drivers_gaze = False
+            drivers_gaze = True
             print(f"Condition lpci")
         print(f'Power control intensity active: {power_control}')
         count += 1

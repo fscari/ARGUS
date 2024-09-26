@@ -29,7 +29,7 @@ def lidar_callback(vid_range, viridis, data, point_list, shared_dict, lidar_live
                    lidar_processing=False):
     global prev_position
 
-    downsampling_factor = 3
+    downsampling_factor = 5.4
     # simple attenuation_rate
     # attenuation_rate = 0.004 + (fog_density / 100.0) * 0.04  # scaling factor
 
@@ -44,7 +44,7 @@ def lidar_callback(vid_range, viridis, data, point_list, shared_dict, lidar_live
     if fog_density == 100:
         intensity_threshold = 0.0041
     elif fog_density == 50:
-        intensity_threshold = 0.055
+        intensity_threshold = 0.055 #0.055
     else:
         intensity_threshold = 0
 
@@ -134,11 +134,11 @@ def lidar_callback(vid_range, viridis, data, point_list, shared_dict, lidar_live
                         print(f"Lidar: {globals.time_lidar}")
                     globals.angle_degrees = np.degrees(angle_radians)
     # # Update the point cloud for visualization
-    # point_list.points = o3d.utility.Vector3dVector(lidar_points) # lidar_points  lidar_points_roi downsampled_points filtered_points  non_road_points
-    # point_list.colors = o3d.utility.Vector3dVector(lidar_color) # lidar_color road_colors non_road_colors
+    point_list.points = o3d.utility.Vector3dVector(non_road_points) # lidar_points  lidar_points_roi downsampled_points filtered_points  non_road_points
+    point_list.colors = o3d.utility.Vector3dVector(non_road_colors) # lidar_color road_colors non_road_colors
 
-    lidar_live_dict['points'].append(lidar_points)
-    lidar_live_dict['color'].append(lidar_color)
+    lidar_live_dict['points'].append(non_road_points)
+    lidar_live_dict['color'].append(non_road_colors)
     time_now = datetime.utcnow()
     epoch_time = int((time_now - datetime(1970, 1, 1)).total_seconds() * 1000000000)
     lidar_live_dict['epoch'].append(epoch_time)
@@ -205,7 +205,7 @@ def adjust_intensity(points, intensity, gaze_angle, field_of_view=60):
     power_reduction_factor = 0.5
     power_increase_factor = 1.1
     # power_reduction_factor = 0
-    # power_increase_factor = 1.25
+    # power_increase_factor = 1.5
     # power_increase_factor = 2.75
 
     # Compute the angle of each point relative to the driver's gaze
