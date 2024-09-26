@@ -44,7 +44,7 @@ def plot_lidar_timestamps(df):
 
 if __name__ == "__main__":
     # Specify the path to your CSV file
-    file_path = 'C:\\Users\\localadmin\\PycharmProjects\\Argus\\lidar_data\\Lidar_data_2024-08-06_123052.csv'
+    file_path = 'C:\\Users\\localadmin\\PycharmProjects\\Argus\\lidar_data\\Lidar_data_2024-09-26_161608.csv'
 
     # Read the LiDAR data from the CSV
     df = read_lidar_data(file_path)

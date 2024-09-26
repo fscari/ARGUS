@@ -69,7 +69,7 @@ class LidarApp:
 
 
 if __name__ == "__main__":
-    file_path = 'C:\\Users\\localadmin\\PycharmProjects\\Argus\\lidar_data\\Lidar_data_2024-08-01_093205.csv'
+    file_path = 'C:\\Users\\localadmin\\PycharmProjects\\Argus\\lidar_data\\Lidar_data_2024-09-26_161608.csv'
     df = load_lidar_data(file_path)
     app = LidarApp(df)
     app.run()
