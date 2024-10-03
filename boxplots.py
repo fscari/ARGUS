@@ -3,11 +3,12 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 
 # Load the data from the CSV file
-file_path = r'C:/Users/localadmin/PycharmProjects/Argus/TTA_data/results_2024-09-20.csv'  # Replace <date> with the actual date or use a variable results_2024-09-17
+file_name = "results_2024-10-02"
+file_path = fr'C:/Users/localadmin/PycharmProjects/Argus/TTA_data/{file_name}.csv'  # Replace <date> with the actual date or use a variable results_2024-09-17
 data = pd.read_csv(file_path)
 
 # Convert Power Control Status to categorical
-data['Power Control Status'] = data['Power Control Status'].astype('category')
+data['Power Control Status'] = data['Power Control Status'].astype('category') # Frequency Control Status , Power Control Status
 
 # Filter data for the specific fog percentages
 fog_values = [0, 50, 100]
@@ -26,6 +27,6 @@ for i, fog in enumerate(fog_values, 1):
 
 # Adjust layout and show the plot
 plt.tight_layout()
-output_file = r'C:\Users\localadmin\PycharmProjects\Argus\TTA_data\results_2024-09-20.png'
+output_file = fr'C:\Users\localadmin\PycharmProjects\Argus\TTA_data\{file_name}.png'
 plt.savefig(output_file)
 plt.show()
