@@ -81,26 +81,8 @@ def lidar_callback(vid_range, viridis, data, point_list, shared_dict, lidar_live
     # Update previous position for the next iteration
     prev_position = curr_position
 
-    if drivers_gaze:
-        # Vectorized mask for points in central vision
-        point_yaws = np.degrees(np.arctan2(lidar_points[:, 1], lidar_points[:, 0]))
-        in_central_vision = np.abs(point_yaws - central_yaw_deg) <= 30
-
-        # Downsample points in central vision
-        central_vision_points = lidar_points[in_central_vision]
-        central_vision_colors = lidar_color[in_central_vision]
-
-        num_points = len(central_vision_points)
-        downsampled_indices = np.linspace(0, num_points - 1, int(num_points / downsampling_factor)).astype(int)
-        downsampled_indices = np.clip(downsampled_indices, 0, num_points - 1)
-        downsampled_points = central_vision_points[downsampled_indices]
-        downsampled_colors = central_vision_colors[downsampled_indices]
-
-        # Combine downsampled central vision points with non-downsampled peripheral points
-        lidar_points = np.vstack((downsampled_points, lidar_points[~in_central_vision]))
-        lidar_color = np.vstack((downsampled_colors, lidar_color[~in_central_vision]))
-
-    if lidar_processing:
+    if power_control or drivers_gaze:
+        print('test')
         vehicle_yaw = np.radians(vehicle.get_transform().rotation.yaw)
         point_angles = np.arctan2(lidar_points[:, 1], lidar_points[:, 0])
         relative_angles = point_angles - vehicle_yaw
@@ -109,6 +91,36 @@ def lidar_callback(vid_range, viridis, data, point_list, shared_dict, lidar_live
         roi_mask = np.abs(relative_angles) <= np.pi / 2
         lidar_points_roi = lidar_points[roi_mask]
         lidar_color_roi = lidar_color[roi_mask]
+
+    if drivers_gaze:
+        # Vectorized mask for points in central vision
+        point_yaws = np.degrees(np.arctan2(lidar_points_roi[:, 1], lidar_points_roi[:, 0])) # lidar_points
+        in_central_vision = np.abs(point_yaws - central_yaw_deg) <= 30
+
+        # Downsample points in central vision
+        central_vision_points = lidar_points_roi[in_central_vision] # lidar_points
+        central_vision_colors = lidar_color_roi[in_central_vision] # lidar_color
+
+        num_points = len(central_vision_points)
+        downsampled_indices = np.linspace(0, num_points - 1, int(num_points / downsampling_factor)).astype(int)
+        downsampled_indices = np.clip(downsampled_indices, 0, num_points - 1)
+        downsampled_points = central_vision_points[downsampled_indices]
+        downsampled_colors = central_vision_colors[downsampled_indices]
+
+        # Combine downsampled central vision points with non-downsampled peripheral points
+        lidar_points_roi = np.vstack((downsampled_points, lidar_points_roi[~in_central_vision]))
+        lidar_color_roi = np.vstack((downsampled_colors, lidar_color_roi[~in_central_vision]))
+        road_points, road_colors, non_road_points, non_road_colors = filter_road_points(lidar_points_roi, lidar_color_roi)
+
+    if lidar_processing:
+        # vehicle_yaw = np.radians(vehicle.get_transform().rotation.yaw)
+        # point_angles = np.arctan2(lidar_points[:, 1], lidar_points[:, 0])
+        # relative_angles = point_angles - vehicle_yaw
+        # relative_angles = relative_angles - np.pi / 2
+        # relative_angles = (relative_angles + np.pi) % (2 * np.pi) - np.pi
+        # roi_mask = np.abs(relative_angles) <= np.pi / 2
+        # lidar_points_roi = lidar_points[roi_mask]
+        # lidar_color_roi = lidar_color[roi_mask]
         road_points, road_colors, non_road_points, non_road_colors = filter_road_points(lidar_points_roi, lidar_color_roi)
         if road_points.size > 0:
             y_min = road_points[:, 1].min()
@@ -134,8 +146,8 @@ def lidar_callback(vid_range, viridis, data, point_list, shared_dict, lidar_live
                         print(f"Lidar: {globals.time_lidar}")
                     globals.angle_degrees = np.degrees(angle_radians)
     # # Update the point cloud for visualization
-    point_list.points = o3d.utility.Vector3dVector(non_road_points) # lidar_points  lidar_points_roi downsampled_points filtered_points  non_road_points
-    point_list.colors = o3d.utility.Vector3dVector(non_road_colors) # lidar_color road_colors non_road_colors
+    # point_list.points = o3d.utility.Vector3dVector(non_road_points) # lidar_points  lidar_points_roi downsampled_points filtered_points  non_road_points
+    # point_list.colors = o3d.utility.Vector3dVector(non_road_colors) # lidar_color road_colors non_road_colors
 
     lidar_live_dict['points'].append(non_road_points)
     lidar_live_dict['color'].append(non_road_colors)
