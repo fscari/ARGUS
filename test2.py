@@ -13,16 +13,17 @@ import globals
 from grid import GridCache
 from datetime import datetime
 import os
+from main2 import user_input
 
 
-def main(file_path, fog_density, power_control=False, drivers_gaze=False, lp=True):
+def main(file_path, fog_density, count, experiment_nr, power_control=False, drivers_gaze=False, lp=True, freq=False):
     global vis, pcd, central_yaw, prev_position # prev_bounding_boxes
     grid_cache = GridCache(y_threshold=0.5)
 
     # Create shared dictionary to save data between multiprocess
     manager = Manager()
     shared_dict = manager.dict()
-    lidar_live_dict = {'epoch': [], 'points': [], 'color': []}
+    lidar_live_dict = {'iteration_nr': [], 'epoch': [], 'points': [], 'color': [], 'driver_angle': []}
 
     # Start Varjo process and create event to stop varjo
     stop_event = Event()
@@ -38,12 +39,16 @@ def main(file_path, fog_density, power_control=False, drivers_gaze=False, lp=Tru
     viridis = np.array(colormaps['plasma'].colors)
     vid_range = np.linspace(0.0, 1.0, viridis.shape[0])
 
-    # Set lidar
-    points = 500000 # 500000
+    # Set lidar parameters
     if drivers_gaze:
         frequency = 27.5
+        # frequency = 12.5
+        points = 687500  # 500000
     else:
+        # frequency = 27.5
         frequency = 20
+        points = 500000  # 500000
+    print(f'Frequency: {frequency}')
     lidar = lidar_setup(world, blueprint_library, vehicle1, points, frequency, fog_density)
     point_list = o3d.geometry.PointCloud()
     yaw_angle = shared_dict.get('yaw', 0)
@@ -54,7 +59,7 @@ def main(file_path, fog_density, power_control=False, drivers_gaze=False, lp=Tru
 
     # Wrap the LiDAR callback to use the queue
     lidar.listen(lambda data: lidar_callback_wrapped(vid_range, viridis, data, point_list, shared_dict, data_queue, lidar_live_dict, vehicle1, grid_cache, fog_density,
-                                                     power_control=power_control, drivers_gaze=drivers_gaze, lidar_processing=lp))
+                                                     count, power_control=power_control, drivers_gaze=drivers_gaze, lidar_processing=lp))
 
     # # Initialize visualizer
     # vis = o3d.visualization.Visualizer()
@@ -92,7 +97,7 @@ def main(file_path, fog_density, power_control=False, drivers_gaze=False, lp=Tru
             lidar.destroy()
             stop_event.set()  # Signal Varjo process to stop
             varjo_process.join()  # Wait for Varjo process to finish
-            # save_lidar_data(lidar_live_dict)  # Save LiDAR data to CSV
+            save_lidar_data(lidar_live_dict, experiment_nr)  # Save LiDAR data to CSV
             break
 
         # Update the point cloud if new data is available
@@ -135,7 +140,7 @@ def main(file_path, fog_density, power_control=False, drivers_gaze=False, lp=Tru
             print(f"arrived: {arrival_time}")
 
         if globals.angle_degrees is not None and to_check is False:
-            print(f"Vehicle approaching from the right with an angle of {abs(np.round(globals.angle_degrees))}!")
+            # print(f"Vehicle approaching from the right with an angle of {abs(np.round(globals.angle_degrees))}!")
             time_diff_lidar = globals.time_lidar - globals.time_vehicle
             time_diff_lidar = time_diff_lidar.total_seconds()
             if abs(yaw_angle) > abs(globals.angle_degrees):
@@ -167,47 +172,61 @@ def main(file_path, fog_density, power_control=False, drivers_gaze=False, lp=Tru
 
     with open(file_path, mode='a', newline='') as file:
         writer = csv.writer(file)
-        writer.writerow([fog_density, velocity, power_control, drivers_gaze, TTA])
+        writer.writerow([iteration_nr, fog_density, velocity, power_control, drivers_gaze, TTA])
 
 
 if __name__ == '__main__':
-    # Define the directory and file name
-    fog_density_input = input("Select a fog density: 0, 50%, 100%")
-    if fog_density_input:
-        fog_density = int(fog_density_input)
-    else:
-        fog_density = 0
-    print(f'You selected a fog density of {fog_density}%')
-    iteration_nr_input = input("Give the iteration number:")
-    if iteration_nr_input:
-        iteration_nr = int(iteration_nr_input)
-    else:
-        iteration_nr = 90
-    print(f'You selected a iteration number of {iteration_nr}')
-    type_input = input("Which type of control do you want to use: POWER CONTROL(p), FREQUENCY CONTROL(f)")
-    if type_input:
-        if type_input == 'p':
-            type = 'power_control'
-        elif type_input == 'f':
-            type = 'frequency_control'
-    else:
-        type = 'power_control'
-    print(f'You selected the type of control {type}')
+    print("Starting a new ARGUS experiment...")
+    experiment_nr, fog_density, iteration_nr, type = user_input()
+    print(f"Experiment Number: {experiment_nr}")
+    print(f"Fog Density: {fog_density}")
+    print(f"Iteration Number: {iteration_nr}")
+    print(f"Control Type: {type}")
+    # experiment_nr_input = input("Give the experiment number:")
+    # experiment_nr = int(experiment_nr_input)
+    # # Define the directory and file name
+    # fog_density_input = input("Select a fog density: 0, 50%, 100%")
+    # if fog_density_input:
+    #     fog_density = int(fog_density_input)
+    # else:
+    #     fog_density = 0
+    # print(f'You selected a fog density of {fog_density}%')
+    # iteration_nr_input = input("Give the iteration number:")
+    # if iteration_nr_input:
+    #     iteration_nr = int(iteration_nr_input)
+    # else:
+    #     iteration_nr = 90
+    # print(f'You selected a iteration number of {iteration_nr}')
+    # type_input = input("Which type of control do you want to use: POWER CONTROL(p), FREQUENCY CONTROL(f)")
+    # if type_input:
+    #     if type_input == 'p':
+    #         type = 'power_control'
+    #     elif type_input == 'f':
+    #         type = 'frequency_control'
+    #     elif type_input == 'pf':
+    #         type = 'pf'
+    # else:
+    #     type = 'none'
+    # print(f'You selected the type of control {type}')
+
+
     directory = directory = r'C:\Users\localadmin\PycharmProjects\Argus\TTA_data'
     date_today = datetime.now().strftime('%Y-%m-%d')
-    file_name = fr'results_{date_today}.csv'
+    file_name = fr'tta_{date_today}_exp_{experiment_nr}.csv'
     file_path = os.path.join(directory, file_name)
     if not os.path.exists(file_path):
         with open(file_path, mode='w', newline='') as file:
             writer = csv.writer(file)
-            writer.writerow(["Fog Percentage", "Velocity", "Power Control Status", "Frequency Control Status", "TTA"])
-    count = 1
+            writer.writerow(["iteration_nr", "Fog Percentage", "Velocity", "Power Control Status", "Frequency Control Status", "TTA"])
+    freq = False
+    count = 0
     for i in range(iteration_nr):
         globals.reset_globals()
         time.sleep(1)
         if count % 2 == 0:
             power_control = False
             drivers_gaze = False
+            freq = False
             print(f"Condition ln")
         else:
             if type == 'power_control':
@@ -218,7 +237,16 @@ if __name__ == '__main__':
                 power_control = False
                 drivers_gaze = True
                 print(f"Condition lpfc")
+            elif type == 'pf':
+                power_control = True
+                drivers_gaze = True
+                print(f"Condition lpifc")
+            else:
+                freq = True
+                pass
         print(f'Power control active: {power_control}')
         print(f'Frequency control active: {drivers_gaze}')
+        with open('/Users/localadmin/PycharmProjects/Argus/status_file.txt', 'w') as f:
+            f.write("Experiment completed")
+        main(file_path, fog_density, count, experiment_nr, power_control=power_control, drivers_gaze=drivers_gaze, freq=freq)
         count += 1
-        main(file_path, fog_density, power_control=power_control, drivers_gaze=drivers_gaze)
