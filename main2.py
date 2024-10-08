@@ -10,10 +10,13 @@ def start_experiment(input_data, root):
         return
 
     try:
-        input_data['fog_density'] = int(fog_density_entry.get())
-        if input_data['fog_density'] not in [0, 50, 100]:
-            messagebox.showerror("Input Error", "Fog density must be 0, 50, or 100.")
-            return
+        if fog_density_var.get():
+            input_data['fog_density'] = [0, 50, 100]
+        else:
+            input_data['fog_density'] = int(fog_density_entry.get())
+            if input_data['fog_density'] not in [0, 50, 100]:
+                messagebox.showerror("Input Error", "Fog density must be 0, 50, or 100.")
+                return
     except ValueError:
         messagebox.showerror("Input Error", "Please enter a valid fog density (0, 50, or 100).")
         return
@@ -40,7 +43,7 @@ def start_experiment(input_data, root):
 
 
 def user_input():
-    global experiment_nr_entry, fog_density_entry, iteration_nr_entry, control_type_var
+    global experiment_nr_entry, fog_density_entry, iteration_nr_entry, control_type_var, fog_density_var
 
     # Dictionary to store user inputs
     input_data = {}
@@ -58,6 +61,10 @@ def user_input():
     tk.Label(root, text="Fog Density (0, 50, 100):").grid(row=1, column=0, padx=10, pady=5)
     fog_density_entry = tk.Entry(root)
     fog_density_entry.grid(row=1, column=1, padx=10, pady=5)
+    # create a checkbutton for selecting all fog densities
+    fog_density_var = tk.IntVar(value=0)
+    tk.Checkbutton(root, text="All fog densities", variable=fog_density_var).grid(row=1, column=2, padx=10, pady=5)
+
 
     # Iteration Number
     tk.Label(root, text="Iteration Number:").grid(row=2, column=0, padx=10, pady=5)

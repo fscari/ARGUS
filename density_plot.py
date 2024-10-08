@@ -3,42 +3,34 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
 
-
-# Load the data from the CSV file
-file_name = "Lidar_data_2024-10-07_exp_22"
+# Load the lidar data from the CSV file
+file_name = "Lidar_data_exp_15 - Copy"
 file_path = fr'C:/Users/localadmin/PycharmProjects/Argus/lidar_data/{file_name}.csv'  # Replace <date> with the actual date or use a variable results_2024-09-17
-data = pd.read_csv(file_path)
+print('reading LiDAR file')
+lidar_data = pd.read_csv(file_path)
+print('LiDAR file read')
 
-# compute angle of the points from the x and y columns
-data['point_angle'] = np.degrees(np.arctan2(data['y'], data['x']))
-# check if the angle is bigger than the angle in the driver_angle column
-in_central_vision = np.abs(data['point_angle'] - data['driver_angle']) <= 30
-# count how many points are in the central vision for each iteration_nr
-print(data.groupby('iteration_nr')['point_angle'].count())
-central_vision_points = data[in_central_vision]
-non_central_vision_points = data[~in_central_vision]
-# count how many points are in the central vision for each iteration_nr
-print(central_vision_points.groupby('iteration_nr')['point_angle'].count())
-print(non_central_vision_points.groupby('iteration_nr')['point_angle'].count())
-# devide the number of points in the central vision by the total number of points to get the percentage of points in the central vision per iteration number
-print(central_vision_points.groupby('iteration_nr')['point_angle'].count()/data.groupby('iteration_nr')['point_angle'].count())
-print(non_central_vision_points.groupby('iteration_nr')['point_angle'].count()/data.groupby('iteration_nr')['point_angle'].count())
-
-data['in_ROI'] = data['point_angle'] < data['driver_angle'] - 30
-# count how many points are in the ROI for each iteration_nr
-print(data.groupby('iteration_nr')['in_ROI'].sum())
-print(data['in_ROI'].sum())
-# devide the number of points in the ROI by the total number of points to get the percentage of points in the ROI per iteration number
-print(data.groupby('iteration_nr')['in_ROI'].sum()/data.groupby('iteration_nr')['in_ROI'].count())
-
-
-
-# create a new df with the number of points in the ROI for each iteration
-df = data.groupby('iteration_nr')['in_ROI'].sum().reset_index()
-# add the fog value, the power control status and the frequency control status to the new df based on the iteration number from the tta_data
+# Load the TTA data from the CSV file
 tta_file_name = file_name.replace('Lidar_data', 'tta')
 tta_file_path = fr'C:/Users/localadmin/PycharmProjects/Argus/TTA_data/{tta_file_name}.csv'
+print('reading TTA file')
 tta_data = pd.read_csv(tta_file_path)
+print('TTA file read')
+
+# compute angle of the points from the x and y columns
+lidar_data['point_angle'] = np.degrees(np.arctan2(lidar_data['y'], lidar_data['x']))
+# check if the angle is bigger than the angle in the driver_angle column
+in_central_vision = np.abs(lidar_data['point_angle'] - lidar_data['driver_angle']) <= 30
+
+lidar_data['in_ROI'] = lidar_data['point_angle'] < lidar_data['driver_angle'] - 30
+# count how many points are in the ROI for each iteration_nr
+print(lidar_data.groupby('iteration_nr')['in_ROI'].sum())
+# devide the number of points in the ROI by the total number of points to get the percentage of points in the ROI per iteration number
+print(lidar_data.groupby('iteration_nr')['in_ROI'].sum() / lidar_data.groupby('iteration_nr')['in_ROI'].count())
+
+# create a new df with the number of points in the ROI for each iteration
+df = lidar_data.groupby('iteration_nr')['in_ROI'].sum().reset_index()
+# add the fog value, the power control status and the frequency control status to the new df based on the iteration number from the tta_data
 df['Fog Percentage'] = tta_data['Fog Percentage']
 df['Power Control Status'] = tta_data['Power Control Status']
 df['Frequency Control Status'] = tta_data['Frequency Control Status']

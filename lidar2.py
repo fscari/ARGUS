@@ -181,10 +181,7 @@ def lidar_callback_wrapped(vid_range, viridis, data, point_list, shared_dict, da
 
 def save_lidar_data(lidar_live_dict, experiment_nr):
     # Define the file path with the current date and experiment number
-    location = 'C:\\Users\\localadmin\\PycharmProjects\\Argus\\lidar_data\\Lidar_data_{}_exp_{}.csv'.format(
-        datetime.now().strftime("%Y-%m-%d"),
-        experiment_nr
-    )
+    location = 'C:\\Users\\localadmin\\PycharmProjects\\Argus\\lidar_data\\Lidar_data_exp_{}.csv'.format(experiment_nr)
 
     # Check if there is data to save
     if not lidar_live_dict['points']:

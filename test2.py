@@ -14,6 +14,7 @@ from grid import GridCache
 from datetime import datetime
 import os
 from main2 import user_input
+from save_density import save_density
 
 
 def main(file_path, fog_density, count, experiment_nr, power_control=False, drivers_gaze=False, lp=True, freq=False):
@@ -158,7 +159,7 @@ def main(file_path, fog_density, count, experiment_nr, power_control=False, driv
         # vis.poll_events()
         # vis.update_renderer()
         # time.sleep(0.005)
-        frame += 1
+        # frame += 1
 
         # Cleanup
     # vis.destroy_window()
@@ -177,42 +178,18 @@ def main(file_path, fog_density, count, experiment_nr, power_control=False, driv
 
 if __name__ == '__main__':
     print("Starting a new ARGUS experiment...")
-    experiment_nr, fog_density, iteration_nr, type = user_input()
+    experiment_nr, fog_density, iteration_nr, control_type = user_input()
     print(f"Experiment Number: {experiment_nr}")
-    print(f"Fog Density: {fog_density}")
+    # if fog density is a list
+    if isinstance(fog_density, list):
+        print(f"Fog Densities: {fog_density}")
+    else:
+        print(f"Fog Density: {fog_density}")
     print(f"Iteration Number: {iteration_nr}")
-    print(f"Control Type: {type}")
-    # experiment_nr_input = input("Give the experiment number:")
-    # experiment_nr = int(experiment_nr_input)
-    # # Define the directory and file name
-    # fog_density_input = input("Select a fog density: 0, 50%, 100%")
-    # if fog_density_input:
-    #     fog_density = int(fog_density_input)
-    # else:
-    #     fog_density = 0
-    # print(f'You selected a fog density of {fog_density}%')
-    # iteration_nr_input = input("Give the iteration number:")
-    # if iteration_nr_input:
-    #     iteration_nr = int(iteration_nr_input)
-    # else:
-    #     iteration_nr = 90
-    # print(f'You selected a iteration number of {iteration_nr}')
-    # type_input = input("Which type of control do you want to use: POWER CONTROL(p), FREQUENCY CONTROL(f)")
-    # if type_input:
-    #     if type_input == 'p':
-    #         type = 'power_control'
-    #     elif type_input == 'f':
-    #         type = 'frequency_control'
-    #     elif type_input == 'pf':
-    #         type = 'pf'
-    # else:
-    #     type = 'none'
-    # print(f'You selected the type of control {type}')
-
+    print(f"Control Type: {control_type}")
 
     directory = directory = r'C:\Users\localadmin\PycharmProjects\Argus\TTA_data'
-    date_today = datetime.now().strftime('%Y-%m-%d')
-    file_name = fr'tta_{date_today}_exp_{experiment_nr}.csv'
+    file_name = fr'tta_exp_{experiment_nr}.csv'
     file_path = os.path.join(directory, file_name)
     if not os.path.exists(file_path):
         with open(file_path, mode='w', newline='') as file:
@@ -220,33 +197,39 @@ if __name__ == '__main__':
             writer.writerow(["iteration_nr", "Fog Percentage", "Velocity", "Power Control Status", "Frequency Control Status", "TTA"])
     freq = False
     count = 0
-    for i in range(iteration_nr):
-        globals.reset_globals()
-        time.sleep(1)
-        if count % 2 == 0:
-            power_control = False
-            drivers_gaze = False
-            freq = False
-            print(f"Condition ln")
-        else:
-            if type == 'power_control':
-                power_control = True
-                drivers_gaze = False
-                print(f"Condition lpic")
-            elif type == 'frequency_control':
+    for fog_density in fog_density:
+        for i in range(iteration_nr):
+            globals.reset_globals()
+            time.sleep(1)
+            if count % 2 == 0:
                 power_control = False
-                drivers_gaze = True
-                print(f"Condition lpfc")
-            elif type == 'pf':
-                power_control = True
-                drivers_gaze = True
-                print(f"Condition lpifc")
+                drivers_gaze = False
+                freq = False
+                print(f"Condition ln")
             else:
-                freq = True
-                pass
-        print(f'Power control active: {power_control}')
-        print(f'Frequency control active: {drivers_gaze}')
-        with open('/Users/localadmin/PycharmProjects/Argus/status_file.txt', 'w') as f:
-            f.write("Experiment completed")
-        main(file_path, fog_density, count, experiment_nr, power_control=power_control, drivers_gaze=drivers_gaze, freq=freq)
-        count += 1
+                if control_type == 'power_control':
+                    power_control = True
+                    drivers_gaze = False
+                    print(f"Condition lpic")
+                elif control_type == 'frequency_control':
+                    power_control = False
+                    drivers_gaze = True
+                    print(f"Condition lpfc")
+                elif control_type == 'pf':
+                    power_control = True
+                    drivers_gaze = True
+                    print(f"Condition lpifc")
+                else:
+                    freq = True
+                    pass
+            print(f'Power control active: {power_control}')
+            print(f'Frequency control active: {drivers_gaze}')
+            with open('/Users/localadmin/PycharmProjects/Argus/status_file.txt', 'w') as f:
+                f.write("Experiment completed")
+            main(file_path, fog_density, count, experiment_nr, power_control=power_control, drivers_gaze=drivers_gaze, freq=freq)
+            count += 1
+            print(f"Experiment {count} completed")
+        print(f"Experiment fog density {fog_density} completed")
+        save_density(experiment_nr)
+        print(f"Density data saved")
+    print("All experiments completed")

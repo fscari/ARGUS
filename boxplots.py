@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 
 # Load the data from the CSV file
-file_name = "tta_2024-10-04_exp_3"
+file_name = "tta_exp_15"
 file_path = fr'C:/Users/localadmin/PycharmProjects/Argus/TTA_data/{file_name}.csv'  # Replace <date> with the actual date or use a variable results_2024-09-17
 data = pd.read_csv(file_path)
 
