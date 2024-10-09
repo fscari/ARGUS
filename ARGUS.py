@@ -1,23 +1,21 @@
 import csv
-import time
+import sys
 import open3d as o3d
 import numpy as np
+import keyboard
+import queue
+import globals
 from matplotlib import colormaps
 from lidar2 import lidar_setup, lidar_callback_wrapped, lidar_map, save_lidar_data
 from carla_setup import carla_setup
 from varjo import varjo_yaw_data
-import keyboard
 from multiprocessing import Process, Manager, Event
-import queue
-import globals
 from grid import GridCache
 from datetime import datetime
-import os
-from main2 import user_input
-from save_density import save_density
+# from start_ARGUS import start_ARGUS
 
 
-def main(file_path, fog_density, count, experiment_nr, power_control=False, drivers_gaze=False, lp=True, freq=False):
+def ARGUS(tta_file_path, fog_density, count, experiment_nr, lidar_directory, power_control=False, drivers_gaze=False, lp=True, freq=False):
     global vis, pcd, central_yaw, prev_position # prev_bounding_boxes
     grid_cache = GridCache(y_threshold=0.5)
 
@@ -34,7 +32,6 @@ def main(file_path, fog_density, count, experiment_nr, power_control=False, driv
     # Get Carla connection
     client, world, current_weather, blueprint_library, vehicle_list, vehicle1, vehicle2 = carla_setup()
     # fog_density = current_weather.fog_density
-    fog_density = fog_density
 
     # Use updated colormap access
     viridis = np.array(colormaps['plasma'].colors)
@@ -98,7 +95,7 @@ def main(file_path, fog_density, count, experiment_nr, power_control=False, driv
             lidar.destroy()
             stop_event.set()  # Signal Varjo process to stop
             varjo_process.join()  # Wait for Varjo process to finish
-            save_lidar_data(lidar_live_dict, experiment_nr)  # Save LiDAR data to CSV
+            save_lidar_data(lidar_live_dict, experiment_nr, lidar_directory, fog_density)  # Save LiDAR data to CSV
             break
 
         # Update the point cloud if new data is available
@@ -141,7 +138,7 @@ def main(file_path, fog_density, count, experiment_nr, power_control=False, driv
             print(f"arrived: {arrival_time}")
 
         if globals.angle_degrees is not None and to_check is False:
-            # print(f"Vehicle approaching from the right with an angle of {abs(np.round(globals.angle_degrees))}!")
+            print(f"Vehicle approaching from the right with an angle of {abs(np.round(globals.angle_degrees))}!")
             time_diff_lidar = globals.time_lidar - globals.time_vehicle
             time_diff_lidar = time_diff_lidar.total_seconds()
             if abs(yaw_angle) > abs(globals.angle_degrees):
@@ -171,65 +168,11 @@ def main(file_path, fog_density, count, experiment_nr, power_control=False, driv
     elif velocity > 7:
         velocity = 30
 
-    with open(file_path, mode='a', newline='') as file:
+    with open(tta_file_path, mode='a', newline='') as file:
         writer = csv.writer(file)
-        writer.writerow([iteration_nr, fog_density, velocity, power_control, drivers_gaze, TTA])
+        writer.writerow([count, fog_density, velocity, power_control, drivers_gaze, TTA])
 
 
-if __name__ == '__main__':
-    print("Starting a new ARGUS experiment...")
-    experiment_nr, fog_density, iteration_nr, control_type = user_input()
-    print(f"Experiment Number: {experiment_nr}")
-    # if fog density is a list
-    if isinstance(fog_density, list):
-        print(f"Fog Densities: {fog_density}")
-    else:
-        print(f"Fog Density: {fog_density}")
-    print(f"Iteration Number: {iteration_nr}")
-    print(f"Control Type: {control_type}")
-
-    directory = directory = r'C:\Users\localadmin\PycharmProjects\Argus\TTA_data'
-    file_name = fr'tta_exp_{experiment_nr}.csv'
-    file_path = os.path.join(directory, file_name)
-    if not os.path.exists(file_path):
-        with open(file_path, mode='w', newline='') as file:
-            writer = csv.writer(file)
-            writer.writerow(["iteration_nr", "Fog Percentage", "Velocity", "Power Control Status", "Frequency Control Status", "TTA"])
-    freq = False
-    count = 0
-    for fog_density in fog_density:
-        for i in range(iteration_nr):
-            globals.reset_globals()
-            time.sleep(1)
-            if count % 2 == 0:
-                power_control = False
-                drivers_gaze = False
-                freq = False
-                print(f"Condition ln")
-            else:
-                if control_type == 'power_control':
-                    power_control = True
-                    drivers_gaze = False
-                    print(f"Condition lpic")
-                elif control_type == 'frequency_control':
-                    power_control = False
-                    drivers_gaze = True
-                    print(f"Condition lpfc")
-                elif control_type == 'pf':
-                    power_control = True
-                    drivers_gaze = True
-                    print(f"Condition lpifc")
-                else:
-                    freq = True
-                    pass
-            print(f'Power control active: {power_control}')
-            print(f'Frequency control active: {drivers_gaze}')
-            with open('/Users/localadmin/PycharmProjects/Argus/status_file.txt', 'w') as f:
-                f.write("Experiment completed")
-            main(file_path, fog_density, count, experiment_nr, power_control=power_control, drivers_gaze=drivers_gaze, freq=freq)
-            count += 1
-            print(f"Experiment {count} completed")
-        print(f"Experiment fog density {fog_density} completed")
-        save_density(experiment_nr)
-        print(f"Density data saved")
-    print("All experiments completed")
+# if __name__ == "__main__":
+#     iteration_nr_joan = sys.argv[1] if len(sys.argv) > 1 else None
+#     start_ARGUS(iteration_nr_joan)

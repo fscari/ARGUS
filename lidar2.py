@@ -83,7 +83,7 @@ def lidar_callback(vid_range, viridis, data, point_list, shared_dict, lidar_live
     # Update previous position for the next iteration
     prev_position = curr_position
 
-    print(f'total number of points before frequency control: {len(lidar_points)}')
+    # print(f'total number of points before frequency control: {len(lidar_points)}')
     if drivers_gaze:
         # Vectorized mask for points in central vision
         point_yaws = np.degrees(np.arctan2(lidar_points[:, 1], lidar_points[:, 0]))
@@ -92,18 +92,18 @@ def lidar_callback(vid_range, viridis, data, point_list, shared_dict, lidar_live
         # Downsample points in central vision
         central_vision_points = lidar_points[in_central_vision] # lidar_points
         central_vision_colors = lidar_color[in_central_vision] # lidar_color
-        print(f'total number of points in central vision: {len(central_vision_points)}')
+        # print(f'total number of points in central vision: {len(central_vision_points)}')
         num_points = len(central_vision_points)
         downsampled_indices = np.linspace(0, num_points - 1, int(num_points / downsampling_factor)).astype(int)
         downsampled_indices = np.clip(downsampled_indices, 0, num_points - 1)
         downsampled_points = central_vision_points[downsampled_indices]
         downsampled_colors = central_vision_colors[downsampled_indices]
-        print(f'total number of downsampled points: {len(downsampled_points)}')
+        # print(f'total number of downsampled points: {len(downsampled_points)}')
 
         # Combine downsampled central vision points with non-downsampled peripheral points
         lidar_points = np.vstack((downsampled_points, lidar_points[~in_central_vision]))
         lidar_color = np.vstack((downsampled_colors, lidar_color[~in_central_vision]))
-        print(f'total number of points after frequency control: {len(lidar_points)}')
+        # print(f'total number of points after frequency control: {len(lidar_points)}')
 
     if lidar_processing:
         vehicle_yaw = np.radians(vehicle.get_transform().rotation.yaw)
@@ -179,9 +179,9 @@ def lidar_callback_wrapped(vid_range, viridis, data, point_list, shared_dict, da
     data_queue.put(point_list)
 
 
-def save_lidar_data(lidar_live_dict, experiment_nr):
-    # Define the file path with the current date and experiment number
-    location = 'C:\\Users\\localadmin\\PycharmProjects\\Argus\\lidar_data\\Lidar_data_exp_{}.csv'.format(experiment_nr)
+def save_lidar_data(lidar_live_dict, experiment_nr, lidar_directory, fog_density):
+    # Define the file path with experiment number
+    location = os.path.join(lidar_directory, 'Lidar_data_exp_{}_fog_density_{}.csv'.format(experiment_nr, fog_density))
 
     # Check if there is data to save
     if not lidar_live_dict['points']:
@@ -206,7 +206,7 @@ def save_lidar_data(lidar_live_dict, experiment_nr):
     df['driver_angle'] = driver_angle_repeated
 
     # Save to CSV
-    # Check if the csv already exists and if so, append to it eitherwise create a new one
+    # Check if the csv already exists and if so, append to it either wise create a new one
     if os.path.exists(location):
         df.to_csv(location, mode='a', header=False, index=False)
         print(f"Lidar data appended to {location}")

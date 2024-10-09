@@ -3,16 +3,16 @@ import pandas as pd
 import os
 
 
-def save_density(experimnet_nr):
-    lidar_file_name = fr'Lidar_data_exp_{experimnet_nr}'
-    file_path = fr'C:/Users/localadmin/PycharmProjects/Argus/lidar_data/{lidar_file_name}.csv'  # Replace <date> with the actual date or use a variable results_2024-09-17
+def save_density(experiment_nr, fog_density, density_directory, lidar_directory, tta_directory):
+    lidar_file_name = fr'Lidar_data_exp_{experiment_nr}_fog_density_{fog_density}'
+    lidar_file_path = os.path.join(lidar_directory, f'{lidar_file_name}.csv')
     print('reading LiDAR file')
-    lidar_data = pd.read_csv(file_path)
+    lidar_data = pd.read_csv(lidar_file_path)
     print('LiDAR file read')
 
     # Load the TTA data from the CSV file
-    tta_file_name = lidar_file_name.replace('Lidar_data', 'tta')
-    tta_file_path = fr'C:/Users/localadmin/PycharmProjects/Argus/TTA_data/{tta_file_name}.csv'
+    tta_file_name = fr'tta_exp_{experiment_nr}'
+    tta_file_path = os.path.join(tta_directory, f'{tta_file_name}.csv')
     print('reading TTA file')
     tta_data = pd.read_csv(tta_file_path)
     print('TTA file read')
@@ -23,15 +23,12 @@ def save_density(experimnet_nr):
     lidar_data['in_ROI'] = lidar_data['point_angle'] < lidar_data['driver_angle'] - 30
 
     # Save the density data
-    density_file_name = fr"density_data_exp_{experimnet_nr}"
-    density_file_path = fr'C:/Users/localadmin/PycharmProjects/Argus/lidar_data/{density_file_name}.csv'
+    density_file_name = fr"density_data_exp_{experiment_nr}_fog_{fog_density}"
+    density_file_path = os.path.join(density_directory, f'{density_file_name}.csv')
 
     df = lidar_data.groupby('iteration_nr')['in_ROI'].sum().reset_index()
     # add the fog value, the power control status and the frequency control status to the new df based on the iteration number from the tta_data
-    df['Fog Percentage'] = tta_data['Fog Percentage']
-    df['Power Control Status'] = tta_data['Power Control Status']
-    df['Frequency Control Status'] = tta_data['Frequency Control Status']
-    df['Velocity'] = tta_data['Velocity']
+    df = df.merge(tta_data[['iteration_nr', 'Fog Percentage', 'Power Control Status', 'Frequency Control Status', 'Velocity']], on='iteration_nr')
 
     if os.path.exists(density_file_path):
         # open the file and read the data
@@ -47,3 +44,14 @@ def save_density(experimnet_nr):
         # save the data to the file
         df.to_csv(density_file_path, index=False)
         # create a new df with the number of points in the ROI for each iteration
+
+
+# Test the function
+if __name__ == "__main__":
+    experiment_nr = 2
+    fog_density = 100
+    exp_directory = fr'C:\Users\localadmin\PycharmProjects\Argus\Experiments\Experiment_{experiment_nr}'
+    density_directory = os.path.join(exp_directory, 'Density')
+    lidar_directory = os.path.join(exp_directory, 'LiDAR')
+    tta_directory = os.path.join(exp_directory, 'TTA')
+    save_density(experiment_nr, fog_density, density_directory, lidar_directory, tta_directory)
